@@ -176,42 +176,134 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
     setActiveLevel('anuncios');
   };
 
-  // Cascading Drill-Down Filtering (Meta Ads Cascade Logic)
+  // Cascading Drill-Down + Omnibox Tags Filtering
   const filteredAdSetsForTab = React.useMemo(() => {
+    let list = adsets;
     if (selectedCampaignIds.length > 0) {
-      return adsets.filter(as => selectedCampaignIds.includes(as.campaign_id));
+      list = list.filter(as => selectedCampaignIds.includes(as.campaign_id));
     }
-    return adsets;
-  }, [adsets, selectedCampaignIds]);
+    if (!activeFilters || activeFilters.length === 0) return list;
+    return list.filter((item) => {
+      return activeFilters.every((tag) => {
+        const valLower = (tag.value || '').toLowerCase();
+        if (tag.type === 'NAME') return (item.name || '').toLowerCase().includes(valLower);
+        if (tag.type === 'ID') return (item.id || '').toLowerCase().includes(valLower);
+        if (tag.type === 'STATUS') {
+          const statusLabel = (item.deliveryInfo?.label || item.status || '').toLowerCase();
+          return statusLabel.includes(valLower);
+        }
+        if (tag.type === 'SPEND') {
+          const itemSpend = item.spend ?? 0;
+          return itemSpend > (parseFloat(valLower) || 0);
+        }
+        return true;
+      });
+    });
+  }, [adsets, selectedCampaignIds, activeFilters]);
 
   const filteredAdsForTab = React.useMemo(() => {
+    let list = ads;
     if (selectedAdSetIds.length > 0) {
-      return ads.filter(ad => selectedAdSetIds.includes(ad.adset_id));
+      list = list.filter(ad => selectedAdSetIds.includes(ad.adset_id));
+    } else if (selectedCampaignIds.length > 0) {
+      list = list.filter(ad => selectedCampaignIds.includes(ad.campaign_id));
     }
-    if (selectedCampaignIds.length > 0) {
-      return ads.filter(ad => selectedCampaignIds.includes(ad.campaign_id));
+    if (!activeFilters || activeFilters.length === 0) return list;
+    return list.filter((item) => {
+      return activeFilters.every((tag) => {
+        const valLower = (tag.value || '').toLowerCase();
+        if (tag.type === 'NAME') return (item.name || '').toLowerCase().includes(valLower);
+        if (tag.type === 'ID') return (item.id || '').toLowerCase().includes(valLower);
+        if (tag.type === 'STATUS') {
+          const statusLabel = (item.deliveryInfo?.label || item.status || '').toLowerCase();
+          return statusLabel.includes(valLower);
+        }
+        if (tag.type === 'SPEND') {
+          const itemSpend = item.spend ?? 0;
+          return itemSpend > (parseFloat(valLower) || 0);
+        }
+        return true;
+      });
+    });
+  }, [ads, selectedAdSetIds, selectedCampaignIds, activeFilters]);
+
+  // Active Visible Table Items for Dynamic KPI Aggregation
+  const activeVisibleItems = React.useMemo(() => {
+    if (activeLevel === 'conjuntos') {
+      return filteredAdSetsForTab;
     }
-    return ads;
-  }, [ads, selectedAdSetIds, selectedCampaignIds]);
+    if (activeLevel === 'anuncios') {
+      return filteredAdsForTab;
+    }
+    return filteredCampaignsByTags;
+  }, [activeLevel, filteredCampaignsByTags, filteredAdSetsForTab, filteredAdsForTab]);
+
+  // Dynamic Client-side KPI Aggregation (Derived State from Omnibox & Active Level Filters)
+  const aggregatedKPIs = React.useMemo<DashboardSummary>(() => {
+    const hasFilters = (activeFilters && activeFilters.length > 0) || 
+                      selectedCampaignIds.length > 0 || 
+                      selectedAdSetIds.length > 0 || 
+                      selectedAdIds.length > 0;
+
+    if (!hasFilters && summary && summary.investimentoTotal !== undefined && summary.investimentoTotal !== null) {
+      return summary;
+    }
+
+    const items = activeVisibleItems;
+
+    let spendSum = 0;
+    let impressionsSum = 0;
+    let clicksSum = 0;
+    let leadsSum = 0;
+
+    items.forEach((item: any) => {
+      if (item.spend !== null && item.spend !== undefined) {
+        spendSum += parseFloat(item.spend || 0);
+      }
+      if (item.impressions !== null && item.impressions !== undefined) {
+        impressionsSum += parseInt(item.impressions || 0);
+      }
+      if (item.clicks !== null && item.clicks !== undefined) {
+        clicksSum += parseInt(item.clicks || 0);
+      }
+      if (item.conversions !== null && item.conversions !== undefined) {
+        leadsSum += parseInt(item.conversions || 0);
+      }
+    });
+
+    const ctrMedio = impressionsSum > 0 ? parseFloat(((clicksSum / impressionsSum) * 100).toFixed(2)) : 0;
+    const cpcMedio = clicksSum > 0 ? parseFloat((spendSum / clicksSum).toFixed(2)) : null;
+    const cpaMedio = leadsSum > 0 ? parseFloat((spendSum / leadsSum).toFixed(2)) : null;
+
+    return {
+      investimentoTotal: spendSum,
+      impressioesTotal: impressionsSum,
+      cliquesTotal: clicksSum,
+      ctrMedio,
+      cpcMedio,
+      leadsTotal: leadsSum > 0 ? leadsSum : null,
+      cpaMedio
+    };
+  }, [activeVisibleItems, activeFilters, selectedCampaignIds, selectedAdSetIds, selectedAdIds, summary]);
 
   const selectedCampaignName = campaigns.find(c => c.id === selectedCampaignId)?.name;
   const selectedAdSetName = adsets.find(as => as.id === selectedAdSetId)?.name;
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
-      {/* Top Metric KPI Cards (Strict Data Integrity Engine Rules) */}
+      {/* Top Metric KPI Cards (Reactive Dynamic Client-Side Aggregation) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {/* Card 1: Investimento Total */}
         <MetricCard
           title="Investimento Total"
-          mainValue={formatCurrency(summary.investimentoTotal)}
+          mainValue={formatCurrency(aggregatedKPIs.investimentoTotal)}
           isLoading={isLoading}
         />
 
         {/* Card 2: Impressões */}
         <MetricCard
           title="Impressões"
-          mainValue={formatNumber(summary.impressioesTotal)}
+          mainValue={formatNumber(aggregatedKPIs.impressioesTotal)}
           showDollarIcon={false}
           isLoading={isLoading}
         />
@@ -219,7 +311,7 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
         {/* Card 3: Cliques */}
         <MetricCard
           title="Cliques no Link"
-          mainValue={formatNumber(summary.cliquesTotal)}
+          mainValue={formatNumber(aggregatedKPIs.cliquesTotal)}
           showDollarIcon={false}
           isLoading={isLoading}
         />
@@ -227,7 +319,7 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
         {/* Card 4: CTR Médio */}
         <MetricCard
           title="CTR Médio"
-          mainValue={formatPercent(summary.ctrMedio)}
+          mainValue={formatPercent(aggregatedKPIs.ctrMedio)}
           showDollarIcon={false}
           isLoading={isLoading}
         />
@@ -235,16 +327,16 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
         {/* Card 5: CPC Médio */}
         <MetricCard
           title="CPC Médio"
-          mainValue={formatCurrency(summary.cpcMedio)}
+          mainValue={aggregatedKPIs.cpcMedio !== null && aggregatedKPIs.cpcMedio !== undefined ? formatCurrency(aggregatedKPIs.cpcMedio) : '—'}
           isLoading={isLoading}
         />
 
         {/* Card 6: Conversões / Leads */}
         <MetricCard
           title="Leads / Compras"
-          mainValue={formatNumber(summary.leadsTotal)}
+          mainValue={aggregatedKPIs.leadsTotal !== null && aggregatedKPIs.leadsTotal !== undefined ? formatNumber(aggregatedKPIs.leadsTotal) : '—'}
           extraInfoLabel="CPA / CAC"
-          extraInfoValue={formatCurrency(summary.cpaMedio)}
+          extraInfoValue={aggregatedKPIs.cpaMedio !== null && aggregatedKPIs.cpaMedio !== undefined ? formatCurrency(aggregatedKPIs.cpaMedio) : '—'}
           showDollarIcon={false}
           isLoading={isLoading}
         />

@@ -150,9 +150,9 @@ export interface DashboardSummary {
   cpcMedio: number | null;
   leadsTotal: number | null;
   cpaMedio: number | null;
-  roasMedio: number | null;
-  reconciliationStatus: 'VALID' | 'WARNING' | 'ERROR' | 'INCOMPLETE';
-  totalCampaigns: number;
+  roasMedio?: number | null;
+  reconciliationStatus?: 'VALID' | 'WARNING' | 'ERROR' | 'INCOMPLETE';
+  totalCampaigns?: number;
 }
 
 export interface MetaConfig {
