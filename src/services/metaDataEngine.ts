@@ -556,12 +556,13 @@ export function resolveDeliveryStatus(rawItem: any, level: 'CAMPAIGN' | 'ADSET' 
   const endTime = rawItem.end_time ? new Date(rawItem.end_time) : null;
 
   // 1. Rejection / Disapproved Policy Check
-  const isDisapproved = effectiveStatus.includes('DISAPPROVED') || effectiveStatus.includes('REJECTED') || rawItem.ad_review_feedback || rawItem.issues_info?.some((i: any) => i.error_code || i.level === 'ERROR');
+  const hasIssuesArray = Array.isArray(rawItem.issues_info) && rawItem.issues_info.some((i: any) => i && (i.error_code || i.level === 'ERROR'));
+  const isDisapproved = effectiveStatus.includes('DISAPPROVED') || effectiveStatus.includes('REJECTED') || Boolean(rawItem.ad_review_feedback) || hasIssuesArray;
   if (isDisapproved) {
     let reason = 'Criativo ou configuração violou as diretrizes de publicidade da Meta.';
     if (rawItem.ad_review_feedback) {
       reason = typeof rawItem.ad_review_feedback === 'string' ? rawItem.ad_review_feedback : JSON.stringify(rawItem.ad_review_feedback);
-    } else if (rawItem.issues_info?.[0]?.error_summary) {
+    } else if (Array.isArray(rawItem.issues_info) && rawItem.issues_info[0]?.error_summary) {
       reason = rawItem.issues_info[0].error_summary;
     }
     return {
@@ -735,60 +736,93 @@ export async function fetchCampaigns(config: MetaConfig, dateRange?: any): Promi
 
     // 3. LEFT JOIN: Merge Master List with Period Insights
     const result = rawCampaigns.map((rawItem: any) => {
-      const periodInsight = campaignInsightsMap.get(rawItem.id);
-      const itemWithInsight = {
-        ...rawItem,
-        insights: periodInsight ? { data: [periodInsight] } : { data: [] }
-      };
+      try {
+        const periodInsight = campaignInsightsMap.get(rawItem.id);
+        const itemWithInsight = {
+          ...rawItem,
+          insights: periodInsight ? { data: [periodInsight] } : { data: [] }
+        };
 
-      const parsed = extractNormalizedMetrics(itemWithInsight);
-      const deliveryInfo = resolveDeliveryStatus(rawItem, 'CAMPAIGN');
-      const fetchedAt = new Date().toISOString();
+        const parsed = extractNormalizedMetrics(itemWithInsight);
+        const deliveryInfo = resolveDeliveryStatus(rawItem, 'CAMPAIGN');
+        const fetchedAt = new Date().toISOString();
 
-      const lineage: DataLineage = {
-        source: 'META_MARKETING_API',
-        endpoint: `${actId}/campaigns`,
-        apiVersion: DEFAULT_API_VERSION,
-        fetchedAt,
-        accountId: config.selectedAccountId,
-        level: 'CAMPAIGN',
-        recordId: rawItem.id,
-        rawRecord: rawItem,
-        reconciliationStatus: 'VALID'
-      };
+        const lineage: DataLineage = {
+          source: 'META_MARKETING_API',
+          endpoint: `${actId}/campaigns`,
+          apiVersion: DEFAULT_API_VERSION,
+          fetchedAt,
+          accountId: config.selectedAccountId,
+          level: 'CAMPAIGN',
+          recordId: rawItem.id,
+          rawRecord: rawItem,
+          reconciliationStatus: 'VALID'
+        };
 
-      rawAuditStore.set(`CAMPAIGN:${rawItem.id}`, { raw: rawItem, lineage });
+        rawAuditStore.set(`CAMPAIGN:${rawItem.id}`, { raw: rawItem, lineage });
 
-      return {
-        id: rawItem.id,
-        name: rawItem.name,
-        status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
-        effective_status: rawItem.effective_status || rawItem.status,
-        deliveryInfo,
-        objective: rawItem.objective || 'UNKNOWN',
-        daily_budget: rawItem.daily_budget ? parseFloat(rawItem.daily_budget) / 100 : null,
-        lifetime_budget: rawItem.lifetime_budget ? parseFloat(rawItem.lifetime_budget) / 100 : null,
-        spend: parsed.spend,
-        impressions: parsed.impressions,
-        clicks: parsed.clicks,
-        ctr: parsed.ctr,
-        cpc: parsed.cpc,
-        conversions: parsed.conversions,
-        resultLabel: parsed.resultLabel,
-        cpa: parsed.cpa,
-        roas: parsed.roas,
-        reach: parsed.reach,
-        frequency: parsed.frequency,
-        cpm: parsed.cpm,
-        profileVisits: parsed.profileVisits,
-        retentionPct: parsed.retentionPct,
-        followersGained: parsed.followersGained,
-        cps: parsed.cps,
-        landingPageViews: parsed.landingPageViews,
-        created_time: rawItem.created_time || fetchedAt,
-        rawRecord: rawItem,
-        lineage
-      };
+        return {
+          id: rawItem.id,
+          name: rawItem.name || `Campanha ${rawItem.id}`,
+          status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
+          effective_status: rawItem.effective_status || rawItem.status || 'PAUSED',
+          deliveryInfo,
+          objective: rawItem.objective || 'UNKNOWN',
+          daily_budget: rawItem.daily_budget ? parseFloat(rawItem.daily_budget) / 100 : null,
+          lifetime_budget: rawItem.lifetime_budget ? parseFloat(rawItem.lifetime_budget) / 100 : null,
+          spend: parsed.spend,
+          impressions: parsed.impressions,
+          clicks: parsed.clicks,
+          ctr: parsed.ctr,
+          cpc: parsed.cpc,
+          conversions: parsed.conversions,
+          resultLabel: parsed.resultLabel,
+          cpa: parsed.cpa,
+          roas: parsed.roas,
+          reach: parsed.reach,
+          frequency: parsed.frequency,
+          cpm: parsed.cpm,
+          profileVisits: parsed.profileVisits,
+          retentionPct: parsed.retentionPct,
+          followersGained: parsed.followersGained,
+          cps: parsed.cps,
+          landingPageViews: parsed.landingPageViews,
+          created_time: rawItem.created_time || fetchedAt,
+          rawRecord: rawItem,
+          lineage
+        };
+      } catch (itemErr) {
+        console.warn('Failed to parse individual campaign item, returning safe default:', itemErr);
+        return {
+          id: rawItem.id,
+          name: rawItem.name || 'Campanha Meta',
+          status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
+          effective_status: rawItem.effective_status || rawItem.status || 'PAUSED',
+          deliveryInfo: { code: 'ACTIVE' as const, label: 'Ativo', badgeColor: 'green' as const },
+          objective: rawItem.objective || 'UNKNOWN',
+          daily_budget: rawItem.daily_budget ? parseFloat(rawItem.daily_budget) / 100 : null,
+          lifetime_budget: rawItem.lifetime_budget ? parseFloat(rawItem.lifetime_budget) / 100 : null,
+          spend: null,
+          impressions: null,
+          clicks: null,
+          ctr: null,
+          cpc: null,
+          conversions: null,
+          resultLabel: 'Leads',
+          cpa: null,
+          roas: null,
+          reach: null,
+          frequency: null,
+          cpm: null,
+          profileVisits: null,
+          retentionPct: null,
+          followersGained: null,
+          cps: null,
+          landingPageViews: null,
+          created_time: rawItem.created_time || new Date().toISOString(),
+          rawRecord: rawItem
+        };
+      }
     });
 
     if (result.length > 0) {
