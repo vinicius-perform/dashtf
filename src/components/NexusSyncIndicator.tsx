@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { RefreshCw, Loader2, CheckCircle2, Zap } from 'lucide-react';
 import { fetchNexusSyncStatus, triggerManualNexusSync, NexusSyncStatus } from '../services/meta/nexusSyncEngine';
 import { clearInsightsCache } from '../services/metaDataEngine';
@@ -16,9 +16,57 @@ export const NexusSyncIndicator: React.FC<NexusSyncIndicatorProps> = ({ onRefres
     message: 'Sincronização profunda concluída com sucesso'
   });
 
-  const [showTooltip, setShowTooltip] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<any>(null);
+
+  // Debounced Hover Bridge Helpers
+  const cancelCloseTimer = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const scheduleCloseTimer = () => {
+    cancelCloseTimer();
+    timerRef.current = setTimeout(() => {
+      setIsOpen(false);
+    }, 250); // 250ms Hover Bridge safe transition window
+  };
+
+  const handleMouseEnter = () => {
+    cancelCloseTimer();
+    setIsOpen(true);
+  };
+
+  const handleMouseLeave = () => {
+    scheduleCloseTimer();
+  };
+
+  const handleToggleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    cancelCloseTimer();
+    setIsOpen(prev => !prev);
+  };
+
+  // Close on Click-Outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        cancelCloseTimer();
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      cancelCloseTimer();
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -41,6 +89,7 @@ export const NexusSyncIndicator: React.FC<NexusSyncIndicatorProps> = ({ onRefres
     e.stopPropagation();
     if (isSyncing) return;
 
+    cancelCloseTimer();
     setIsSyncing(true);
     setToastMessage(null);
     setSyncStatus(prev => ({
@@ -97,19 +146,29 @@ export const NexusSyncIndicator: React.FC<NexusSyncIndicatorProps> = ({ onRefres
 
   return (
     <div 
-      className="relative flex items-center cursor-pointer group"
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
+      ref={containerRef}
+      className="relative flex items-center cursor-pointer group select-none"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
-      {/* 6px Glowing LED Dot */}
-      <div className="flex items-center gap-2 py-1 px-2.5 rounded-full bg-brand-card/60 border border-brand-border/40 hover:border-brand-neon/40 transition-all">
+      {/* 6px Glowing LED Dot Button Trigger */}
+      <div 
+        onClick={handleToggleClick}
+        className={`flex items-center gap-2 py-1 px-2.5 rounded-full bg-brand-card/80 border transition-all ${
+          isOpen ? 'border-brand-neon bg-brand-neon/10 text-white shadow-md shadow-brand-neon/15' : 'border-brand-border/60 hover:border-brand-neon/40 text-zinc-300'
+        }`}
+      >
         <span className={`w-2 h-2 rounded-full transition-all duration-300 ${getLedStyle()}`} />
-        <span className="text-[11px] font-mono text-zinc-300 font-medium">Nexus Sync</span>
+        <span className="text-[11px] font-mono font-bold">Nexus Sync</span>
       </div>
 
-      {/* Ultra-Clean Dark Tooltip Popover */}
-      {showTooltip && (
-        <div className="absolute right-0 top-full mt-2 z-50 w-72 p-4 bg-[#161618] border border-brand-border rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 text-left">
+      {/* Ultra-Clean Dark Popover (Hover Bridge + Click-to-Open + CSS Safe Area Bridge) */}
+      {isOpen && (
+        <div 
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          className="absolute right-0 top-full mt-2 z-50 w-72 p-4 bg-[#161618] border border-brand-border rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 text-left before:content-[''] before:absolute before:-top-3 before:left-0 before:w-full before:h-3"
+        >
           <div className="flex items-center justify-between border-b border-brand-border/60 pb-2.5 mb-2.5">
             <span className="text-xs font-extrabold text-white flex items-center gap-1.5">
               <span className={`w-2 h-2 rounded-full ${getLedStyle()}`} />
