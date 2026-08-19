@@ -58,17 +58,31 @@ serve(async (req) => {
       const rawList = data.data || [];
 
       if (rawList.length > 0) {
-        const formattedRows = rawList.map((ins: any) => ({
-          ad_account_id: normAcc,
-          campaign_id: ins.campaign_id,
-          date: ins.date_start,
-          spend: parseFloat(ins.spend || '0'),
-          impressions: parseInt(ins.impressions || '0'),
-          inline_link_clicks: parseInt(ins.inline_link_clicks || ins.clicks || '0'),
-          actions: ins.actions || [],
-          cost_per_action_type: ins.cost_per_action_type || [],
-          updated_at: new Date().toISOString()
-        }));
+        const leadTypes = ['lead', 'offsite_conversion.fb_pixel_lead', 'onsite_conversion.lead_grouped'];
+
+        const formattedRows = rawList.map((ins: any) => {
+          const rawActions = ins.actions || [];
+          const strictLeadActions = Array.isArray(rawActions)
+            ? rawActions.filter((act: any) =>
+                act && typeof act.action_type === 'string' && (
+                  leadTypes.includes(act.action_type) ||
+                  act.action_type.startsWith('offsite_conversion.custom.')
+                )
+              )
+            : [];
+
+          return {
+            ad_account_id: normAcc,
+            campaign_id: ins.campaign_id,
+            date: ins.date_start,
+            spend: parseFloat(ins.spend || '0'),
+            impressions: parseInt(ins.impressions || '0'),
+            inline_link_clicks: parseInt(ins.inline_link_clicks || ins.clicks || '0'),
+            actions: strictLeadActions,
+            cost_per_action_type: ins.cost_per_action_type || [],
+            updated_at: new Date().toISOString()
+          };
+        });
 
         // 3. Upsert to meta_daily_insights
         await supabase

@@ -73,7 +73,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Right Action Icons & User Profile */}
         <div className="flex items-center gap-4">
           {/* Nexus Sync Automation Heartbeat Indicator */}
-          <NexusSyncIndicator />
+          <NexusSyncIndicator onRefresh={onRefresh} />
 
           {/* Search Box */}
           <div className="relative w-64">
