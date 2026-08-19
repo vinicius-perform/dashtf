@@ -23,6 +23,9 @@ import {
   DashboardSummary 
 } from './types/meta';
 
+import { LoginView } from './components/LoginView';
+import { supabase } from './lib/supabase';
+import { Loader2 } from 'lucide-react';
 import { DateRange } from './components/DateRangePicker';
 import { getTodayRange } from './utils/timezone';
 import { 
@@ -32,6 +35,10 @@ import {
 } from './services/meta/dailyInsightsEngine';
 
 export function App() {
+  // Auth Session State & Loading Guard
+  const [session, setSession] = useState<any>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
+
   const [activeTab, setActiveTab] = useState<'dashboard' | 'integracoes'>('dashboard');
   const [activeLevel, setActiveLevel] = useState<string>('campanhas');
   const [metaConfig, setMetaConfig] = useState<MetaConfig>(getSavedMetaConfig());
@@ -51,6 +58,21 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [lastUpdatedTime, setLastUpdatedTime] = useState<string>(new Date().toLocaleString('pt-BR'));
+
+  // 1. Check Supabase Auth Session Persistence on App Mount (Prevents F5 flash)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      setSession(initialSession);
+      setIsAuthChecking(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      setSession(currentSession);
+      setIsAuthChecking(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Trigger 60-day retention purger on app mount
   useEffect(() => {
@@ -163,6 +185,39 @@ export function App() {
     );
   };
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setSession(null);
+  };
+
+  // 2. Initial Auth Session Checking Splash Guard
+  if (isAuthChecking) {
+    return (
+      <div className="min-h-screen bg-brand-bg flex items-center justify-center text-white select-none">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-brand-neon animate-spin" />
+          <span className="text-xs text-zinc-400 font-semibold tracking-wide">
+            Verificando autenticação no Supabase...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Unauthenticated State Guard -> Render Login Screen
+  if (!session) {
+    return (
+      <LoginView 
+        onLoginSuccess={() => {
+          supabase.auth.getSession().then(({ data: { session: newSession } }) => {
+            setSession(newSession);
+          });
+        }} 
+      />
+    );
+  }
+
+  // 4. Authenticated State -> Render Full Dashboard
   return (
     <div className="flex min-h-screen bg-brand-bg text-white font-sans selection:bg-brand-neon selection:text-black">
       {/* Sidebar Navigation */}
@@ -171,6 +226,7 @@ export function App() {
         setActiveTab={(tab) => setActiveTab(tab as any)}
         activeLevel={activeLevel}
         setActiveLevel={setActiveLevel}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Area */}

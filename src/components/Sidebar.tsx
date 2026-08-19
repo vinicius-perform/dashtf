@@ -3,7 +3,8 @@ import { Logo } from './Logo';
 import { 
   LayoutDashboard, 
   Link2, 
-  Settings
+  Settings,
+  LogOut
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -11,13 +12,15 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   activeLevel?: string;
   setActiveLevel?: (level: string) => void;
+  onLogout?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
   activeTab, 
   setActiveTab,
   activeLevel,
-  setActiveLevel
+  setActiveLevel,
+  onLogout
 }) => {
   return (
     <aside className="w-64 bg-brand-sidebar border-r border-brand-border flex flex-col shrink-0 min-h-screen select-none">
@@ -75,12 +78,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* Footer Settings */}
-      <div className="p-3 border-t border-brand-border">
+      {/* Footer Settings & Logout */}
+      <div className="p-3 border-t border-brand-border space-y-1">
         <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800/50 transition-colors">
           <Settings className="w-4 h-4" />
           <span>Configurações</span>
         </button>
+
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Sair da Conta</span>
+          </button>
+        )}
       </div>
     </aside>
   );
