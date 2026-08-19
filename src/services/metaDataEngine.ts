@@ -311,14 +311,21 @@ export async function fetchAdAccounts(token: string): Promise<MetaAdAccount[]> {
   return Array.from(accountMap.values());
 }
 
-// Date Range Parameter Builder (Enforces exact time_range for strict endpoint unifications)
+// Date Range Parameter Builder (Enforces exact time_range, NO date_preset parameter allowed!)
 export function buildDateParams(dateRange?: any): Record<string, string> {
   const params: Record<string, string> = {};
-  if (dateRange?.startDate && dateRange?.endDate) {
-    params.time_range = JSON.stringify({ since: dateRange.startDate, until: dateRange.endDate });
-  } else {
-    params.date_preset = 'today';
+  
+  let since = dateRange?.startDate;
+  let until = dateRange?.endDate;
+
+  if (!since || !until) {
+    const todayStr = new Date().toISOString().split('T')[0];
+    since = todayStr;
+    until = todayStr;
   }
+
+  // Strictly enforce explicit time_range parameter
+  params.time_range = JSON.stringify({ since, until });
   return params;
 }
 

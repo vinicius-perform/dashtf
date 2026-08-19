@@ -6,7 +6,8 @@ import {
   getYesterdayRange, 
   getLast7DaysRange, 
   getThisMonthRange, 
-  getLastMonthRange 
+  getLastMonthRange,
+  formatDateRangeLabel
 } from '../utils/timezone';
 
 export interface DateRange {
@@ -71,6 +72,8 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChang
       range = getTodayRange(timezone);
     }
 
+    range.label = formatDateRangeLabel(range.startDate, range.endDate, timezone);
+
     const sParts = range.startDate.split('-');
     setStartYear(parseInt(sParts[0]));
     setStartMonth(parseInt(sParts[1]) - 1);
@@ -84,11 +87,18 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChang
 
   const handleDateClick = (dayNum: number, mIdx: number, yNum: number) => {
     // Range selection logic
+    let newStart = dayNum;
+    let newEnd = dayNum;
+
     if (dayNum < startDay || mIdx !== startMonth) {
       setStartDay(dayNum);
       setEndDay(dayNum);
+      newStart = dayNum;
+      newEnd = dayNum;
     } else {
       setEndDay(dayNum);
+      newStart = Math.min(startDay, dayNum);
+      newEnd = Math.max(startDay, dayNum);
     }
 
     setStartMonth(mIdx);
@@ -96,15 +106,14 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChang
 
     const formatNum = (n: number) => (n < 10 ? `0${n}` : `${n}`);
     const mStr = formatNum(mIdx + 1);
-    const yStr = yNum.toString().slice(2);
 
-    const newStart = Math.min(startDay, dayNum);
-    const newEnd = Math.max(startDay, dayNum);
+    const startDateStr = `${yNum}-${mStr}-${formatNum(newStart)}`;
+    const endDateStr = `${yNum}-${mStr}-${formatNum(newEnd)}`;
 
     onChange({
-      startDate: `${yNum}-${mStr}-${formatNum(newStart)}`,
-      endDate: `${yNum}-${mStr}-${formatNum(newEnd)}`,
-      label: `${formatNum(newStart)}/${mStr}/${yStr} - ${formatNum(newEnd)}/${mStr}/${yStr}`
+      startDate: startDateStr,
+      endDate: endDateStr,
+      label: formatDateRangeLabel(startDateStr, endDateStr, timezone)
     });
   };
 

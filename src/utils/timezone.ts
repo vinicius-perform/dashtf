@@ -97,3 +97,29 @@ export function getLastMonthRange(timezone = 'America/Sao_Paulo') {
     label: `${startInfo.shortDate} - ${endInfo.shortDate}`
   };
 }
+
+export function formatDateRangeLabel(startDate: string, endDate: string, timezone = 'America/Sao_Paulo'): string {
+  const todayRange = getTodayRange(timezone);
+  const yesterdayRange = getYesterdayRange(timezone);
+
+  const formatDateDisplay = (dateStr: string) => {
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    const y = parts[0].slice(2);
+    const m = parts[1];
+    const d = parts[2];
+    return `${d}/${m}/${y}`;
+  };
+
+  if (startDate === endDate) {
+    if (startDate === todayRange.startDate) {
+      return `Hoje (${formatDateDisplay(startDate)})`;
+    }
+    if (startDate === yesterdayRange.startDate) {
+      return `Ontem (${formatDateDisplay(startDate)})`;
+    }
+    return formatDateDisplay(startDate);
+  }
+
+  return `${formatDateDisplay(startDate)} - ${formatDateDisplay(endDate)}`;
+}
