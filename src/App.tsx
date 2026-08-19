@@ -12,7 +12,8 @@ import {
   fetchAds, 
   fetchAccountInsights,
   computeSummaryMetrics, 
-  fetchAdAccounts
+  fetchAdAccounts,
+  extractLeadsFromActions
 } from './services/metaDataEngine';
 import { 
   MetaConfig, 
@@ -157,6 +158,17 @@ export function App() {
           baseSummary.cpcMedio = parseFloat(parseFloat(accInsights.cpc).toFixed(2));
         } else if (accInsights.spend && inlineClicks) {
           baseSummary.cpcMedio = parseFloat((parseFloat(accInsights.spend) / inlineClicks).toFixed(2));
+        }
+
+        // Strict Lead Action Extraction for Account Card
+        if (accInsights.actions) {
+          const accLeads = extractLeadsFromActions(accInsights.actions);
+          baseSummary.leadsTotal = accLeads.count > 0 ? accLeads.count : null;
+          if (accLeads.count > 0 && baseSummary.investimentoTotal) {
+            baseSummary.cpaMedio = parseFloat((baseSummary.investimentoTotal / accLeads.count).toFixed(2));
+          } else {
+            baseSummary.cpaMedio = null;
+          }
         }
       }
 

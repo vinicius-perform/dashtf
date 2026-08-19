@@ -322,6 +322,33 @@ export function buildDateParams(dateRange?: any): Record<string, string> {
   return params;
 }
 
+// Strict Lead Action Extractor (Prevents Ghost Leads from secondary actions)
+export function extractLeadsFromActions(actionsArray: any[]): { count: number; actionType: string | null } {
+  if (!actionsArray || !Array.isArray(actionsArray)) return { count: 0, actionType: null };
+
+  const leadTypes = [
+    'lead', 
+    'offsite_conversion.fb_pixel_lead', 
+    'onsite_conversion.lead_grouped'
+  ];
+
+  // Search exclusively for strict lead action_types or custom lead conversion offsite_conversion.custom.{ID}
+  const leadAction = actionsArray.find(action => 
+    action && typeof action.action_type === 'string' && (
+      leadTypes.includes(action.action_type) || 
+      action.action_type.startsWith('offsite_conversion.custom.')
+    )
+  );
+
+  if (!leadAction) return { count: 0, actionType: null };
+
+  const val = parseFloat(leadAction.value || '0');
+  return {
+    count: val > 0 ? val : 0,
+    actionType: val > 0 ? leadAction.action_type : null
+  };
+}
+
 // Strict Action Metric Extractor (No Random, No Fallback, Zero "Múltiplas conversões")
 export function extractNormalizedMetrics(rawItem: any) {
   const insight = rawItem.insights?.data?.[0];
@@ -389,17 +416,7 @@ export function extractNormalizedMetrics(rawItem: any) {
     return found ? sum : null;
   };
 
-  // Map active action counts
-  const activeActionsMap = new Map<string, number>();
-  actions.forEach((act) => {
-    const val = parseFloat(act.value || '0');
-    if (val > 0) {
-      activeActionsMap.set(act.action_type, val);
-    }
-  });
-
   // Primary Action Isolation Logic (Strict Meta Ads Manager Alignment)
-  // Part 1: Prioritize 'lead' action_type for lead campaigns, ignore secondary actions (link_click, post_engagement, landing_page_view)
   let primaryActionType: string | null = null;
   let conversions: number | null = null;
   let resultLabel: string = 'Leads';
@@ -407,39 +424,54 @@ export function extractNormalizedMetrics(rawItem: any) {
 
   if (nameStr.includes('[LEAD D]')) {
     resultLabel = 'Lead D';
-    primaryActionType = 'lead';
+    const leadRes = extractLeadsFromActions(actions);
+    conversions = leadRes.count > 0 ? leadRes.count : null;
+    primaryActionType = leadRes.actionType || 'lead';
   } else if (nameStr.includes('[WHATSAPP]') || objectiveStr.includes('MESSAGES')) {
     resultLabel = 'Conversas Iniciadas';
-    primaryActionType = 'onsite_conversion.messaging_conversation_started_7d';
+    const msgAction = actions.find(a => a.action_type === 'onsite_conversion.messaging_conversation_started_7d');
+    if (msgAction) {
+      const val = parseFloat(msgAction.value || '0');
+      conversions = val > 0 ? val : null;
+      primaryActionType = msgAction.action_type;
+    } else {
+      primaryActionType = 'onsite_conversion.messaging_conversation_started_7d';
+    }
   } else if (nameStr.includes('DIAGNÓSTICO') || nameStr.includes('LP DIAGNÓST')) {
     resultLabel = 'Lead B LP Diagnóstico';
-    primaryActionType = 'offsite_conversion.fb_pixel_lead';
+    const leadRes = extractLeadsFromActions(actions);
+    conversions = leadRes.count > 0 ? leadRes.count : null;
+    primaryActionType = leadRes.actionType || 'offsite_conversion.fb_pixel_lead';
   } else if (objectiveStr.includes('SALES') || objectiveStr.includes('CONVERSIONS')) {
     resultLabel = 'Compras';
-    primaryActionType = 'offsite_conversion.fb_pixel_purchase';
+    const purchaseAction = actions.find(a => 
+      a.action_type === 'offsite_conversion.fb_pixel_purchase' || 
+      a.action_type === 'purchase' || 
+      a.action_type === 'omni_purchase'
+    );
+    if (purchaseAction) {
+      const val = parseFloat(purchaseAction.value || '0');
+      conversions = val > 0 ? val : null;
+      primaryActionType = purchaseAction.action_type;
+    } else {
+      primaryActionType = 'offsite_conversion.fb_pixel_purchase';
+    }
   } else if (objectiveStr.includes('TRAFFIC') || nameStr.includes('CLIQUE')) {
     resultLabel = 'Cliques no Link';
-    primaryActionType = 'link_click';
+    const clickAction = actions.find(a => a.action_type === 'link_click');
+    if (clickAction) {
+      const val = parseFloat(clickAction.value || '0');
+      conversions = val > 0 ? val : null;
+      primaryActionType = clickAction.action_type;
+    } else {
+      primaryActionType = 'link_click';
+    }
   } else {
-    // Default to Lead Campaigns
+    // Default to Lead Campaigns (Site/Form Lead)
     resultLabel = 'Leads';
-    primaryActionType = 'lead';
-  }
-
-  // Find exact action matching primaryActionType in actions array
-  let matchedAction = actions.find(a => a.action_type === primaryActionType);
-
-  // If primary action is lead, check for 'lead' or 'offsite_conversion.fb_pixel_lead'
-  if (!matchedAction && (primaryActionType === 'lead' || primaryActionType === 'offsite_conversion.fb_pixel_lead')) {
-    matchedAction = actions.find(a => a.action_type === 'lead') ||
-                    actions.find(a => a.action_type === 'offsite_conversion.fb_pixel_lead') ||
-                    actions.find(a => a.action_type.includes('lead'));
-  }
-
-  if (matchedAction) {
-    const val = parseFloat(matchedAction.value || '0');
-    conversions = val > 0 ? val : null;
-    primaryActionType = matchedAction.action_type;
+    const leadRes = extractLeadsFromActions(actions);
+    conversions = leadRes.count > 0 ? leadRes.count : null;
+    primaryActionType = leadRes.actionType || 'lead';
   }
 
   // Extract CPA strictly from cost_per_action_type array for the isolated primaryActionType
@@ -447,11 +479,11 @@ export function extractNormalizedMetrics(rawItem: any) {
     const matchedCost = costPerActionType.find(c => c.action_type === primaryActionType);
     if (matchedCost && matchedCost.value) {
       cpa = parseFloat(parseFloat(matchedCost.value).toFixed(2));
+    } else if (spend !== null && spend > 0) {
+      cpa = parseFloat((spend / conversions).toFixed(2));
     }
-  }
-
-  if (cpa === null && spend !== null && conversions !== null && conversions > 0) {
-    cpa = parseFloat((spend / conversions).toFixed(2));
+  } else {
+    cpa = null;
   }
 
   // 2. Visitas ao Perfil
