@@ -9,12 +9,16 @@ import {
   Cpu,
   Play,
   FileSpreadsheet,
-  BookOpen
+  BookOpen,
+  Loader2,
+  RefreshCw,
+  Zap
 } from 'lucide-react';
 import { getAllRawAuditRecords } from '../services/metaDataEngine';
 import { MetaConfig } from '../types/meta';
 import { METRIC_DICTIONARY } from '../services/meta/metricDictionary';
 import { runMetaDataEngineUnitTests, UnitTestResult } from '../services/meta/unitTests';
+import { runInitialBackfillScript } from '../services/meta/dailyInsightsEngine';
 
 interface MetaDebugModalProps {
   isOpen: boolean;
@@ -27,10 +31,14 @@ export const MetaDebugModal: React.FC<MetaDebugModalProps> = ({
   onClose,
   config
 }) => {
-  const [activeTab, setActiveTab] = useState<'audit' | 'actions' | 'tests' | 'dictionary' | 'config'>('audit');
+  const [activeTab, setActiveTab] = useState<'audit' | 'actions' | 'tests' | 'dictionary' | 'backfill' | 'config'>('audit');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<UnitTestResult[]>([]);
+
+  // Backfill 60-Day State
+  const [isBackfilling, setIsBackfilling] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<{ success: boolean; message: string; totalRecords: number } | null>(null);
 
   if (!isOpen) return null;
 
@@ -59,6 +67,19 @@ export const MetaDebugModal: React.FC<MetaDebugModalProps> = ({
   const handleRunTests = () => {
     const res = runMetaDataEngineUnitTests();
     setTestResults(res);
+  };
+
+  const handleExecuteBackfill = async () => {
+    setIsBackfilling(true);
+    setBackfillResult(null);
+    try {
+      const res = await runInitialBackfillScript(config, '2026-07-01', '2026-08-18');
+      setBackfillResult(res);
+    } catch (err: any) {
+      setBackfillResult({ success: false, totalRecords: 0, message: err.message || 'Erro no processamento' });
+    } finally {
+      setIsBackfilling(false);
+    }
   };
 
   return (
@@ -113,6 +134,16 @@ export const MetaDebugModal: React.FC<MetaDebugModalProps> = ({
             >
               <FileSpreadsheet className="w-4 h-4" />
               <span>Action Inspector ({actionInspectorRows.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('backfill')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${
+                activeTab === 'backfill' ? 'bg-brand-neon text-black font-bold shadow-md shadow-brand-neon/20' : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Zap className="w-4 h-4 text-brand-neon group-hover:text-black" />
+              <span>Carga Inicial (Backfill 60d)</span>
             </button>
 
             <button
@@ -362,6 +393,75 @@ export const MetaDebugModal: React.FC<MetaDebugModalProps> = ({
                     Clique em "Executar Testes Agora" para rodar a bateria de testes de integridade.
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'backfill' && (
+            <div className="space-y-6 max-w-2xl mx-auto">
+              <div className="bg-brand-card border border-brand-border rounded-xl p-6 space-y-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-brand-neon/15 text-brand-neon border border-brand-neon/30">
+                    <Zap className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-white">
+                      Carga Inicial de Dados Históricos (Backfill de 60 Dias)
+                    </h3>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      Baixa todos os snapshots diários (`time_increment=1`) de <strong>01/07/2026 até 18/08/2026</strong> da Meta API e grava em lote no <strong>Supabase PostgreSQL</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-brand-sidebar border border-brand-border/80 rounded-xl p-4 space-y-2 text-xs font-mono text-zinc-300">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">Período de Varredura:</span>
+                    <span className="text-brand-neon font-bold">01/07/2026 ➔ 18/08/2026 (49 dias)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">Modo de Agregação:</span>
+                    <span className="text-white font-bold">time_increment=1 (Quebra Diária Nativa)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">Destino de Gravação:</span>
+                    <span className="text-emerald-400 font-bold">Supabase (`meta_daily_insights`) + Cache Local</span>
+                  </div>
+                </div>
+
+                {/* Toast Result Feedback Banner */}
+                {backfillResult && (
+                  <div className={`p-4 rounded-xl border flex items-start gap-3 text-xs ${
+                    backfillResult.success ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-300'
+                  }`}>
+                    <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-sm text-white">
+                        {backfillResult.success ? 'Carga Inicial Concluída!' : 'Erro na Carga Inicial'}
+                      </div>
+                      <div className="mt-1 font-mono">{backfillResult.message}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Primary Action Button */}
+                <button
+                  onClick={handleExecuteBackfill}
+                  disabled={isBackfilling}
+                  className="w-full py-3.5 px-4 bg-brand-neon hover:bg-brand-neonHover text-black font-black text-xs rounded-xl shadow-lg shadow-brand-neon/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isBackfilling ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-black" />
+                      <span>Baixando histórico de 60 dias da Meta API e gravando no Supabase...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4" />
+                      <span>Executar Carga Inicial de 60 Dias (Supabase DB)</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           )}

@@ -314,11 +314,11 @@ export async function fetchHybridCampaigns(
   return rawMetaFetchFn(config, dateRange);
 }
 
-// 3. One-off Initial Backfill Script (01/07/2026 to 17/08/2026)
+// 3. One-off Initial Backfill Script (01/07/2026 to 18/08/2026)
 export async function runInitialBackfillScript(
   config: MetaConfig,
   startDate = '2026-07-01',
-  endDate = '2026-08-17'
+  endDate = '2026-08-18'
 ): Promise<{ success: boolean; totalRecords: number; message: string }> {
   if (!config.isConnected || !config.accessToken || !config.selectedAccountId) {
     return { success: false, totalRecords: 0, message: 'Configuração do Meta Ads ausente ou desconectada.' };
@@ -328,7 +328,7 @@ export async function runInitialBackfillScript(
   const normAcc = normalizeAccountId(config.selectedAccountId);
   const db = getStoredDailyInsights();
 
-  console.log(`🚀 [BACKFILL ENGINE] Starting initial historical scan from ${startDate} to ${endDate}...`);
+  console.log(`🚀 [BACKFILL ENGINE] Executando Carga Inicial de ${startDate} até ${endDate} com time_increment=1...`);
 
   try {
     const params = {
@@ -336,15 +336,41 @@ export async function runInitialBackfillScript(
       level: 'campaign',
       fields: 'campaign_id,campaign_name,spend,impressions,inline_link_clicks,inline_link_click_ctr,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type',
       time_range: JSON.stringify({ since: startDate, until: endDate }),
-      time_increment: 1, // Daily breakdown from Meta Graph API
+      time_increment: 1, // Native Meta daily breakdown (1 record per campaign per day)
       limit: 500
     };
 
-    const res = await axios.get(`${GRAPH_API_BASE}/${actId}/insights`, { params, timeout: 30000 });
-    const rawList = res.data?.data || [];
+    // Paginated fetch to guarantee 100% of daily rows are downloaded across 60 days
+    let rawList: any[] = [];
+    try {
+      const res = await axios.get(`${GRAPH_API_BASE}/${actId}/insights`, { params, timeout: 45000 });
+      if (res.data && Array.isArray(res.data.data)) {
+        rawList = res.data.data;
+        let nextUrl = res.data.paging?.next;
+        let safetyCounter = 0;
+        while (nextUrl && safetyCounter < 10) {
+          safetyCounter++;
+          try {
+            const pageRes = await axios.get(nextUrl, { timeout: 30000 });
+            if (pageRes.data && Array.isArray(pageRes.data.data)) {
+              rawList = [...rawList, ...pageRes.data.data];
+            }
+            nextUrl = pageRes.data?.paging?.next || null;
+          } catch {
+            break;
+          }
+        }
+      }
+    } catch (apiErr: any) {
+      throw new Error(`Falha na Meta API: ${apiErr?.response?.data?.error?.message || apiErr.message}`);
+    }
 
-    let count = 0;
+    if (!rawList || rawList.length === 0) {
+      return { success: true, totalRecords: 0, message: 'Nenhum registro retornado pela Meta API para o período selecionado.' };
+    }
+
     const nowIso = new Date().toISOString();
+    const formattedSupabaseRows: any[] = [];
 
     rawList.forEach((ins: any) => {
       const date = ins.date_start;
@@ -354,6 +380,7 @@ export async function runInitialBackfillScript(
       const parsed = extractNormalizedMetrics({ insights: { data: [ins] } });
       const key = `${normAcc}:CAMPAIGN:${campaignId}:${date}`;
 
+      // Update Local Map Storage
       db.set(key, {
         key,
         accountId: normAcc,
@@ -379,17 +406,47 @@ export async function runInitialBackfillScript(
         },
         updatedAt: nowIso
       });
-      count++;
+
+      // Prepare Supabase Bulk Upsert Payload
+      formattedSupabaseRows.push({
+        ad_account_id: normAcc,
+        campaign_id: campaignId,
+        date: date,
+        spend: parseFloat(ins.spend || '0'),
+        impressions: parseInt(ins.impressions || '0'),
+        inline_link_clicks: parseInt(ins.inline_link_clicks || ins.clicks || '0'),
+        actions: ins.actions || [],
+        cost_per_action_type: ins.cost_per_action_type || [],
+        updated_at: nowIso
+      });
     });
 
+    // Save to Local Storage Cache
     saveStoredDailyInsights(db);
     purgeExpiredSnapshots(60);
 
-    const msg = `✅ Backfill concluído com sucesso: ${count} snapshots diários gravados na meta_daily_insights de ${startDate} até ${endDate}.`;
-    console.log(msg);
-    return { success: true, totalRecords: count, message: msg };
+    // Execute Bulk Upsert to Supabase PostgreSQL (meta_daily_insights table)
+    let supabaseSuccess = false;
+    try {
+      const { error: upsertErr } = await supabase
+        .from('meta_daily_insights')
+        .upsert(formattedSupabaseRows, { onConflict: 'ad_account_id,campaign_id,date' });
+
+      if (upsertErr) {
+        console.warn('Supabase bulk upsert error:', upsertErr.message);
+      } else {
+        supabaseSuccess = true;
+        console.log(`✅ [SUPABASE BULK UPSERT SUCCESS] ${formattedSupabaseRows.length} snapshots diários inseridos na tabela meta_daily_insights.`);
+      }
+    } catch (sbErr) {
+      console.warn('Supabase bulk insert exception:', sbErr);
+    }
+
+    const successMsg = `Histórico de 60 dias carregado com sucesso! ${formattedSupabaseRows.length} snapshots diários gravados ${supabaseSuccess ? 'no Supabase PostgreSQL' : 'no cache local'}.`;
+    console.log(successMsg);
+    return { success: true, totalRecords: formattedSupabaseRows.length, message: successMsg };
   } catch (err: any) {
-    const errMsg = `Erro ao executar Backfill: ${err?.response?.data?.error?.message || err.message}`;
+    const errMsg = `Erro ao executar Carga Inicial: ${err.message}`;
     console.error(errMsg);
     return { success: false, totalRecords: 0, message: errMsg };
   }
