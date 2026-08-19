@@ -1,0 +1,230 @@
+import React, { useState, useEffect } from 'react';
+import { Sidebar } from './components/Sidebar';
+import { Header } from './components/Header';
+import { DashboardView } from './components/DashboardView';
+import { IntegrationsView } from './components/IntegrationsView';
+import { MetaDebugModal } from './components/MetaDebugModal';
+import { 
+  getSavedMetaConfig, 
+  saveMetaConfig,
+  fetchCampaigns, 
+  fetchAdSets, 
+  fetchAds, 
+  fetchAccountInsights,
+  computeSummaryMetrics, 
+  fetchAdAccounts
+} from './services/metaDataEngine';
+import { 
+  MetaConfig, 
+  MetaAdAccount, 
+  MetaCampaign, 
+  MetaAdSet, 
+  MetaAd, 
+  DashboardSummary 
+} from './types/meta';
+
+import { DateRange } from './components/DateRangePicker';
+import { getTodayRange } from './utils/timezone';
+import { 
+  fetchHybridCampaigns, 
+  sync7DaysAttributionWindow, 
+  purgeExpiredSnapshots 
+} from './services/meta/dailyInsightsEngine';
+
+export function App() {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'integracoes'>('dashboard');
+  const [activeLevel, setActiveLevel] = useState<string>('campanhas');
+  const [metaConfig, setMetaConfig] = useState<MetaConfig>(getSavedMetaConfig());
+  const [accounts, setAccounts] = useState<MetaAdAccount[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(metaConfig.selectedAccountId || '1115861513053539');
+
+  const selectedAccObj = accounts.find(a => a.id === selectedAccountId);
+  const accountTimezone = selectedAccObj?.timezone_name || 'America/Sao_Paulo';
+
+  const [dateRange, setDateRange] = useState<DateRange>(() => getTodayRange(accountTimezone));
+
+  const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
+  const [adsets, setAdSets] = useState<MetaAdSet[]>([]);
+  const [ads, setAds] = useState<MetaAd[]>([]);
+  const [summary, setSummary] = useState<DashboardSummary>(computeSummaryMetrics([]));
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
+  const [lastUpdatedTime, setLastUpdatedTime] = useState<string>(new Date().toLocaleString('pt-BR'));
+
+  // Trigger 60-day retention purger on app mount
+  useEffect(() => {
+    purgeExpiredSnapshots(60);
+  }, []);
+
+  // Midnight Reactivity Check: Auto-advance "Hoje" date filter when account timezone crosses midnight
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const freshToday = getTodayRange(accountTimezone);
+      setDateRange((prev) => {
+        if (prev.label.startsWith('Hoje') && prev.startDate !== freshToday.startDate) {
+          console.log(`🌙 [MIDNIGHT REACTIVITY] Account timezone crossed midnight! Advancing filter to ${freshToday.startDate}`);
+          return freshToday;
+        }
+        return prev;
+      });
+    }, 30000); // Check every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [accountTimezone]);
+
+  const handleSelectAccount = (accId: string) => {
+    const accObj = accounts.find(a => a.id === accId);
+    const updatedConfig: MetaConfig = {
+      ...metaConfig,
+      selectedAccountId: accId,
+      accountName: accObj ? accObj.name : metaConfig.accountName
+    };
+
+    setSelectedAccountId(accId);
+    setMetaConfig(updatedConfig);
+    saveMetaConfig(updatedConfig);
+  };
+
+  const loadAllData = async () => {
+    setIsLoading(true);
+    try {
+      const currentConfig: MetaConfig = {
+        ...metaConfig,
+        selectedAccountId: selectedAccountId
+      };
+
+      // Hybrid Orchestration: 100% DB for past, Live for Today, Combined for Ranges
+      const [campData, adsetData, adData, accInsights] = await Promise.all([
+        fetchHybridCampaigns(currentConfig, dateRange, fetchCampaigns),
+        fetchAdSets(currentConfig, undefined, dateRange),
+        fetchAds(currentConfig, undefined, dateRange),
+        fetchAccountInsights(currentConfig, dateRange)
+      ]);
+
+      setCampaigns(campData);
+      setAdSets(adsetData);
+      setAds(adData);
+
+      const baseSummary = computeSummaryMetrics(campData);
+
+      // Requirement 4: Strictly map account level KPI insights
+      if (accInsights) {
+        if (accInsights.spend !== undefined && accInsights.spend !== null) {
+          baseSummary.investimentoTotal = parseFloat(accInsights.spend);
+        }
+        if (accInsights.impressions) {
+          baseSummary.impressioesTotal = parseInt(accInsights.impressions);
+        }
+
+        // Inline Link Clicks for Cliques no Link (Not generic clicks)
+        const inlineClicks = accInsights.inline_link_clicks !== undefined
+          ? parseInt(accInsights.inline_link_clicks)
+          : (accInsights.clicks ? parseInt(accInsights.clicks) : null);
+        baseSummary.cliquesTotal = inlineClicks;
+
+        // Inline Link Click CTR for CTR Médio
+        if (accInsights.inline_link_click_ctr !== undefined) {
+          baseSummary.ctrMedio = parseFloat(parseFloat(accInsights.inline_link_click_ctr).toFixed(2));
+        } else if (accInsights.ctr) {
+          baseSummary.ctrMedio = parseFloat(parseFloat(accInsights.ctr).toFixed(2));
+        }
+
+        // CPC Médio (Cost per link click)
+        if (accInsights.cpc !== undefined) {
+          baseSummary.cpcMedio = parseFloat(parseFloat(accInsights.cpc).toFixed(2));
+        } else if (accInsights.spend && inlineClicks) {
+          baseSummary.cpcMedio = parseFloat((parseFloat(accInsights.spend) / inlineClicks).toFixed(2));
+        }
+      }
+
+      setSummary(baseSummary);
+
+      // Requirement 2: Reactive update of last updated timestamp on API promise resolution
+      setLastUpdatedTime(new Date().toLocaleString('pt-BR'));
+    } catch (e) {
+      console.error('Error in Meta Data Integrity Engine:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAllData();
+  }, [selectedAccountId, metaConfig.accessToken, dateRange]);
+
+  const handleToggleCampaignStatus = (campaignId: string) => {
+    setCampaigns((prev) =>
+      prev.map((c) =>
+        c.id === campaignId
+          ? { ...c, status: c.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' }
+          : c
+      )
+    );
+  };
+
+  return (
+    <div className="flex min-h-screen bg-brand-bg text-white font-sans selection:bg-brand-neon selection:text-black">
+      {/* Sidebar Navigation */}
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={(tab) => setActiveTab(tab as any)}
+        activeLevel={activeLevel}
+        setActiveLevel={setActiveLevel}
+      />
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        {/* Header Bar */}
+        <Header
+          activeTab={activeTab}
+          metaConfig={metaConfig}
+          accounts={accounts}
+          selectedAccountId={selectedAccountId}
+          setSelectedAccountId={handleSelectAccount}
+          dateRange={dateRange}
+          setDateRange={setDateRange}
+          onRefresh={loadAllData}
+          isLoading={isLoading}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          onOpenDebug={() => setIsDebugOpen(true)}
+          lastUpdatedTime={lastUpdatedTime}
+        />
+
+        {/* Dynamic Screen View */}
+        <main className="flex-1 pb-12">
+          {activeTab === 'dashboard' ? (
+            <DashboardView
+              summary={summary}
+              campaigns={campaigns}
+              adsets={adsets}
+              ads={ads}
+              activeLevel={activeLevel}
+              setActiveLevel={setActiveLevel}
+              onToggleCampaignStatus={handleToggleCampaignStatus}
+              isLoading={isLoading}
+            />
+          ) : (
+            <IntegrationsView
+              metaConfig={metaConfig}
+              setMetaConfig={setMetaConfig}
+              accounts={accounts}
+              setAccounts={setAccounts}
+              onRefreshData={loadAllData}
+            />
+          )}
+        </main>
+
+        {/* Meta Data Debug Engine Modal */}
+        <MetaDebugModal
+          isOpen={isDebugOpen}
+          onClose={() => setIsDebugOpen(false)}
+          config={metaConfig}
+        />
+      </div>
+    </div>
+  );
+}
+
+export default App;
