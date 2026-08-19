@@ -676,39 +676,52 @@ export function resolveDeliveryStatus(rawItem: any, level: 'CAMPAIGN' | 'ADSET' 
   };
 }
 
-// Fetch Live Campaigns with Data Lineage Traceability & Instant Cache-First Strategy
+// Persistent Master Object Stores (Ensures entity master lists are never lost or emptied)
+const masterCampaignsStore = new Map<string, any[]>();
+const masterAdSetsStore = new Map<string, any[]>();
+const masterAdsStore = new Map<string, any[]>();
+
+// Fetch Live Campaigns with Master List + Left Join Metrics Consolidation
 export async function fetchCampaigns(config: MetaConfig, dateRange?: any): Promise<MetaCampaign[]> {
   if (!config.isConnected || !config.accessToken || !config.selectedAccountId) {
     return [];
   }
 
   const actId = toActAccountId(config.selectedAccountId);
+  const normAcc = normalizeAccountId(config.selectedAccountId);
   const cacheKey = getCacheKey(config.selectedAccountId, 'campaigns', dateRange);
-
-  // 1. Check Cache-First
-  const cached = metaInsightsCache.get(cacheKey);
-  if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
-    return cached.data;
-  }
 
   const dateParams = buildDateParams(dateRange);
 
   try {
-    // A. Query Campaign Metadata
-    const rawCampaigns = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/campaigns`, {
-      access_token: config.accessToken.trim(),
-      fields: 'id,name,status,effective_status,configured_status,objective,daily_budget,lifetime_budget,start_time,end_time,issues_info,created_time',
-      limit: 100
-    });
+    // 1. ALWAYS FETCH Master List of Campaigns (No date_preset / time_range params)
+    let rawCampaigns: any[] = [];
+    try {
+      rawCampaigns = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/campaigns`, {
+        access_token: config.accessToken.trim(),
+        fields: 'id,name,status,effective_status,configured_status,objective,daily_budget,lifetime_budget,start_time,end_time,issues_info,created_time',
+        limit: 500
+      });
+      if (rawCampaigns && rawCampaigns.length > 0) {
+        masterCampaignsStore.set(normAcc, rawCampaigns);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch live master campaign list, using fallback store:', e);
+      rawCampaigns = masterCampaignsStore.get(normAcc) || [];
+    }
 
-    // B. Query Campaign Level Insights (Strict Date Range Isolation)
+    if ((!rawCampaigns || rawCampaigns.length === 0) && masterCampaignsStore.has(normAcc)) {
+      rawCampaigns = masterCampaignsStore.get(normAcc) || [];
+    }
+
+    // 2. Query Campaign Level Insights for the filtered date period
     const campaignInsightsMap = new Map<string, any>();
     try {
       const insightsList = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/insights`, {
         access_token: config.accessToken.trim(),
         level: 'campaign',
         fields: 'campaign_id,spend,impressions,inline_link_clicks,inline_link_click_ctr,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,video_thruplay_watched_actions,video_p50_watched_actions',
-        limit: 100,
+        limit: 500,
         ...dateParams
       });
       insightsList.forEach((ins: any) => {
@@ -720,7 +733,7 @@ export async function fetchCampaigns(config: MetaConfig, dateRange?: any): Promi
       console.warn('Campaign level insights query warning:', err);
     }
 
-    // C. Merge Metadata with Date-Isolated Insights
+    // 3. LEFT JOIN: Merge Master List with Period Insights
     const result = rawCampaigns.map((rawItem: any) => {
       const periodInsight = campaignInsightsMap.get(rawItem.id);
       const itemWithInsight = {
@@ -741,14 +754,7 @@ export async function fetchCampaigns(config: MetaConfig, dateRange?: any): Promi
         level: 'CAMPAIGN',
         recordId: rawItem.id,
         rawRecord: rawItem,
-        reconciliationStatus: 'VALID',
-        derivedFormulas: {
-          ctr: 'clicks / impressions * 100',
-          cpc: 'spend / clicks',
-          cpm: 'spend / impressions * 1000',
-          cpa: 'spend / conversions',
-          cps: 'spend / followersGained'
-        }
+        reconciliationStatus: 'VALID'
       };
 
       rawAuditStore.set(`CAMPAIGN:${rawItem.id}`, { raw: rawItem, lineage });
@@ -791,42 +797,81 @@ export async function fetchCampaigns(config: MetaConfig, dateRange?: any): Promi
 
     return result;
   } catch (err) {
-    console.error('Meta API campaigns fetch failed:', err);
-    return cached ? cached.data : [];
+    console.error('Meta API campaigns fetch failed, returning stored master list fallback:', err);
+    const fallbackList = masterCampaignsStore.get(normAcc) || [];
+    return fallbackList.map((rawItem: any) => ({
+      id: rawItem.id,
+      name: rawItem.name,
+      status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
+      effective_status: rawItem.effective_status || rawItem.status,
+      deliveryInfo: resolveDeliveryStatus(rawItem, 'CAMPAIGN'),
+      objective: rawItem.objective || 'UNKNOWN',
+      daily_budget: rawItem.daily_budget ? parseFloat(rawItem.daily_budget) / 100 : null,
+      lifetime_budget: rawItem.lifetime_budget ? parseFloat(rawItem.lifetime_budget) / 100 : null,
+      spend: null,
+      impressions: null,
+      clicks: null,
+      ctr: null,
+      cpc: null,
+      conversions: null,
+      resultLabel: 'Leads',
+      cpa: null,
+      roas: null,
+      reach: null,
+      frequency: null,
+      cpm: null,
+      profileVisits: null,
+      retentionPct: null,
+      followersGained: null,
+      cps: null,
+      landingPageViews: null,
+      created_time: rawItem.created_time || new Date().toISOString(),
+      rawRecord: rawItem
+    }));
   }
 }
 
-// Fetch Live AdSets
+// Fetch Live AdSets with Master List + Left Join Consolidation
 export async function fetchAdSets(config: MetaConfig, campaigns?: MetaCampaign[], dateRange?: any): Promise<MetaAdSet[]> {
   if (!config.isConnected || !config.accessToken || !config.selectedAccountId) {
     return [];
   }
 
   const actId = toActAccountId(config.selectedAccountId);
+  const normAcc = normalizeAccountId(config.selectedAccountId);
   const cacheKey = getCacheKey(config.selectedAccountId, 'adsets', dateRange);
-
-  // 1. Check Cache-First
-  const cached = metaInsightsCache.get(cacheKey);
-  if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
-    return cached.data;
-  }
 
   const dateParams = buildDateParams(dateRange);
 
   try {
-    const rawAdSets = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/adsets`, {
-      access_token: config.accessToken.trim(),
-      fields: 'id,name,status,effective_status,configured_status,campaign_id,campaign{name},daily_budget,lifetime_budget,start_time,end_time,issues_info,targeting',
-      limit: 100
-    });
+    // 1. ALWAYS FETCH Master List of AdSets (No date_preset / time_range params)
+    let rawAdSets: any[] = [];
+    try {
+      rawAdSets = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/adsets`, {
+        access_token: config.accessToken.trim(),
+        fields: 'id,name,status,effective_status,configured_status,campaign_id,campaign{name},daily_budget,lifetime_budget,targeting,start_time,end_time,issues_info',
+        limit: 500
+      });
+      if (rawAdSets && rawAdSets.length > 0) {
+        masterAdSetsStore.set(normAcc, rawAdSets);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch live master adsets list, using fallback store:', e);
+      rawAdSets = masterAdSetsStore.get(normAcc) || [];
+    }
 
+    if ((!rawAdSets || rawAdSets.length === 0) && masterAdSetsStore.has(normAcc)) {
+      rawAdSets = masterAdSetsStore.get(normAcc) || [];
+    }
+
+    // 2. Query AdSet Level Insights for the filtered date period
     const adsetInsightsMap = new Map<string, any>();
     try {
       const insightsList = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/insights`, {
         access_token: config.accessToken.trim(),
         level: 'adset',
         fields: 'adset_id,spend,impressions,inline_link_clicks,inline_link_click_ctr,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,video_thruplay_watched_actions,video_p50_watched_actions',
-        limit: 100,
+        limit: 500,
         ...dateParams
       });
       insightsList.forEach((ins: any) => {
@@ -838,6 +883,7 @@ export async function fetchAdSets(config: MetaConfig, campaigns?: MetaCampaign[]
       console.warn('Adset level insights query warning:', err);
     }
 
+    // 3. LEFT JOIN: Merge Master List with Period Insights
     const result = rawAdSets.map((rawItem: any) => {
       const periodInsight = adsetInsightsMap.get(rawItem.id);
       const itemWithInsight = {
@@ -881,6 +927,7 @@ export async function fetchAdSets(config: MetaConfig, campaigns?: MetaCampaign[]
         deliveryInfo,
         targeting_summary: targetingSummary,
         daily_budget: rawItem.daily_budget ? parseFloat(rawItem.daily_budget) / 100 : null,
+        lifetime_budget: rawItem.lifetime_budget ? parseFloat(rawItem.lifetime_budget) / 100 : null,
         spend: parsed.spend,
         impressions: parsed.impressions,
         clicks: parsed.clicks,
@@ -909,42 +956,82 @@ export async function fetchAdSets(config: MetaConfig, campaigns?: MetaCampaign[]
 
     return result;
   } catch (err) {
-    console.error('Meta API adsets fetch failed:', err);
-    return cached ? cached.data : [];
+    console.error('Meta API adsets fetch failed, returning stored master list fallback:', err);
+    const fallbackList = masterAdSetsStore.get(normAcc) || [];
+    return fallbackList.map((rawItem: any) => ({
+      id: rawItem.id,
+      campaign_id: rawItem.campaign_id || rawItem.campaign?.id || '',
+      campaign_name: rawItem.campaign?.name || 'Campanha Meta',
+      name: rawItem.name,
+      status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
+      effective_status: rawItem.effective_status || rawItem.status,
+      deliveryInfo: resolveDeliveryStatus(rawItem, 'ADSET'),
+      targeting_summary: 'Brasil | 18-65+ anos',
+      daily_budget: rawItem.daily_budget ? parseFloat(rawItem.daily_budget) / 100 : null,
+      lifetime_budget: rawItem.lifetime_budget ? parseFloat(rawItem.lifetime_budget) / 100 : null,
+      spend: null,
+      impressions: null,
+      clicks: null,
+      ctr: null,
+      cpc: null,
+      conversions: null,
+      resultLabel: 'Leads',
+      cpa: null,
+      roas: null,
+      reach: null,
+      frequency: null,
+      cpm: null,
+      profileVisits: null,
+      retentionPct: null,
+      followersGained: null,
+      cps: null,
+      landingPageViews: null,
+      rawRecord: rawItem
+    }));
   }
 }
 
-// Fetch Live Ads
+// Fetch Live Ads with Master List + Left Join Consolidation
 export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRange?: any): Promise<MetaAd[]> {
   if (!config.isConnected || !config.accessToken || !config.selectedAccountId) {
     return [];
   }
 
   const actId = toActAccountId(config.selectedAccountId);
+  const normAcc = normalizeAccountId(config.selectedAccountId);
   const cacheKey = getCacheKey(config.selectedAccountId, 'ads', dateRange);
-
-  // 1. Check Cache-First
-  const cached = metaInsightsCache.get(cacheKey);
-  if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
-    return cached.data;
-  }
 
   const dateParams = buildDateParams(dateRange);
 
   try {
-    const rawAds = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/ads`, {
-      access_token: config.accessToken.trim(),
-      fields: 'id,name,status,effective_status,configured_status,adset_id,adset{name},campaign_id,campaign{name},creative{thumbnail_url,title,body,image_url},ad_review_feedback,issues_info',
-      limit: 100
-    });
+    // 1. ALWAYS FETCH Master List of Ads (No date_preset / time_range params)
+    let rawAds: any[] = [];
+    try {
+      rawAds = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/ads`, {
+        access_token: config.accessToken.trim(),
+        fields: 'id,name,status,effective_status,configured_status,adset_id,adset{name},campaign_id,campaign{name},creative{thumbnail_url,title,body,image_url},ad_review_feedback,issues_info',
+        limit: 500
+      });
+      if (rawAds && rawAds.length > 0) {
+        masterAdsStore.set(normAcc, rawAds);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch live master ads list, using fallback store:', e);
+      rawAds = masterAdsStore.get(normAcc) || [];
+    }
 
+    if ((!rawAds || rawAds.length === 0) && masterAdsStore.has(normAcc)) {
+      rawAds = masterAdsStore.get(normAcc) || [];
+    }
+
+    // 2. Query Ad Level Insights for the filtered date period
     const adInsightsMap = new Map<string, any>();
     try {
       const insightsList = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/insights`, {
         access_token: config.accessToken.trim(),
         level: 'ad',
         fields: 'ad_id,spend,impressions,inline_link_clicks,inline_link_click_ctr,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,video_thruplay_watched_actions,video_p50_watched_actions',
-        limit: 100,
+        limit: 500,
         ...dateParams
       });
       insightsList.forEach((ins: any) => {
@@ -956,6 +1043,7 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
       console.warn('Ad level insights query warning:', err);
     }
 
+    // 3. LEFT JOIN: Merge Master List with Period Insights
     const result = rawAds.map((rawItem: any) => {
       const periodInsight = adInsightsMap.get(rawItem.id);
       const itemWithInsight = {
@@ -1023,8 +1111,43 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
 
     return result;
   } catch (err) {
-    console.error('Meta API ads fetch failed:', err);
-    return cached ? cached.data : [];
+    console.error('Meta API ads fetch failed, returning stored master list fallback:', err);
+    const fallbackList = masterAdsStore.get(normAcc) || [];
+    return fallbackList.map((rawItem: any) => {
+      const creative = rawItem.creative || {};
+      return {
+        id: rawItem.id,
+        adset_id: rawItem.adset_id || rawItem.adset?.id || '',
+        adset_name: rawItem.adset?.name || 'Conjunto de Anúncios',
+        campaign_id: rawItem.campaign_id || rawItem.campaign?.id || '',
+        campaign_name: rawItem.campaign?.name || 'Campanha Meta',
+        name: rawItem.name,
+        status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
+        effective_status: rawItem.effective_status || rawItem.status,
+        deliveryInfo: resolveDeliveryStatus(rawItem, 'AD'),
+        format: 'IMAGE' as 'IMAGE' | 'VIDEO' | 'CAROUSEL',
+        thumbnail_url: creative.thumbnail_url || creative.image_url || 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=300&auto=format&fit=crop&q=80',
+        headline: creative.title || creative.body || 'Criativo Ativo no Meta Ads',
+        spend: null,
+        impressions: null,
+        clicks: null,
+        ctr: null,
+        cpc: null,
+        cpm: null,
+        reach: null,
+        frequency: null,
+        conversions: null,
+        resultLabel: 'Leads',
+        cpa: null,
+        profileVisits: null,
+        retentionPct: null,
+        followersGained: null,
+        cps: null,
+        landingPageViews: null,
+        roas: null,
+        rawRecord: rawItem
+      };
+    });
   }
 }
 
