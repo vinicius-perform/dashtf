@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { DateRangePicker, DateRange } from './DateRangePicker';
 import { MetaAdAccount, MetaConfig } from '../types/meta';
+import { NexusSyncIndicator } from './NexusSyncIndicator';
 
 import { SearchableSelect } from './SearchableSelect';
 
@@ -71,6 +72,9 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Action Icons & User Profile */}
         <div className="flex items-center gap-4">
+          {/* Nexus Sync Automation Heartbeat Indicator */}
+          <NexusSyncIndicator />
+
           {/* Search Box */}
           <div className="relative w-64">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />

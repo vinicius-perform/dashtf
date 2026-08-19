@@ -52,3 +52,28 @@ DO $$ BEGIN
         CREATE POLICY "Enable all access for views" ON user_saved_views FOR ALL USING (true);
     END IF;
 END $$;
+
+
+-- TABELA 3: STATUS DO NEXUS SYNC (AUTOMATION HEARTBEAT & CRON STATUS)
+CREATE TABLE IF NOT EXISTS sys_sync_status (
+    id INT PRIMARY KEY DEFAULT 1,
+    engine_name VARCHAR(50) DEFAULT 'Nexus Sync',
+    last_run TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    status VARCHAR(20) DEFAULT 'SUCCESS', -- 'SUCCESS', 'ERROR', 'RUNNING'
+    message TEXT
+);
+
+-- Inserir a linha mestre (Singleton)
+INSERT INTO sys_sync_status (id, last_run, status, message)
+VALUES (1, NOW(), 'SUCCESS', 'Sincronização profunda concluída com sucesso')
+ON CONFLICT (id) DO NOTHING;
+
+-- Ativar Segurança (RLS)
+ALTER TABLE sys_sync_status ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Enable all access for sync status' AND tablename = 'sys_sync_status') THEN
+        CREATE POLICY "Enable all access for sync status" ON sys_sync_status FOR ALL USING (true);
+    END IF;
+END $$;
+
