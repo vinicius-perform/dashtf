@@ -951,69 +951,103 @@ export async function fetchAdSets(config: MetaConfig, campaigns?: MetaCampaign[]
 
     // 3. LEFT JOIN: Merge Master List with Period Insights
     const result = rawAdSets.map((rawItem: any) => {
-      const periodInsight = adsetInsightsMap.get(rawItem.id);
-      const itemWithInsight = {
-        ...rawItem,
-        insights: periodInsight ? { data: [periodInsight] } : { data: [] }
-      };
+      try {
+        const periodInsight = adsetInsightsMap.get(rawItem.id);
+        const itemWithInsight = {
+          ...rawItem,
+          insights: periodInsight ? { data: [periodInsight] } : { data: [] }
+        };
 
-      const parsed = extractNormalizedMetrics(itemWithInsight);
-      const deliveryInfo = resolveDeliveryStatus(rawItem, 'ADSET');
-      const fetchedAt = new Date().toISOString();
+        const parsed = extractNormalizedMetrics(itemWithInsight);
+        const deliveryInfo = resolveDeliveryStatus(rawItem, 'ADSET');
+        const fetchedAt = new Date().toISOString();
 
-      let targetingSummary = 'Não especificado';
-      if (rawItem.targeting) {
-        const geo = rawItem.targeting.geo_locations?.countries?.join(', ') || 'Brasil';
-        const minAge = rawItem.targeting.min_age || 18;
-        const maxAge = rawItem.targeting.max_age || '65+';
-        targetingSummary = `${geo} | ${minAge}-${maxAge} anos`;
+        let targetingSummary = 'Não especificado';
+        if (rawItem.targeting) {
+          const geo = rawItem.targeting.geo_locations?.countries?.join(', ') || 'Brasil';
+          const minAge = rawItem.targeting.min_age || 18;
+          const maxAge = rawItem.targeting.max_age || '65+';
+          targetingSummary = `${geo} | ${minAge}-${maxAge} anos`;
+        }
+
+        const lineage: DataLineage = {
+          source: 'META_MARKETING_API',
+          endpoint: `${actId}/adsets`,
+          apiVersion: DEFAULT_API_VERSION,
+          fetchedAt,
+          accountId: config.selectedAccountId,
+          level: 'ADSET',
+          recordId: rawItem.id,
+          rawRecord: rawItem,
+          reconciliationStatus: 'VALID'
+        };
+
+        rawAuditStore.set(`ADSET:${rawItem.id}`, { raw: rawItem, lineage });
+
+        return {
+          id: rawItem.id,
+          campaign_id: rawItem.campaign_id || rawItem.campaign?.id || '',
+          campaign_name: rawItem.campaign?.name || 'Campanha Meta',
+          name: rawItem.name || `Conjunto ${rawItem.id}`,
+          status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
+          effective_status: rawItem.effective_status || rawItem.status || 'PAUSED',
+          deliveryInfo,
+          targeting_summary: targetingSummary,
+          daily_budget: rawItem.daily_budget ? parseFloat(rawItem.daily_budget) / 100 : null,
+          lifetime_budget: rawItem.lifetime_budget ? parseFloat(rawItem.lifetime_budget) / 100 : null,
+          spend: parsed.spend,
+          impressions: parsed.impressions,
+          clicks: parsed.clicks,
+          ctr: parsed.ctr,
+          cpc: parsed.cpc,
+          conversions: parsed.conversions,
+          resultLabel: parsed.resultLabel,
+          cpa: parsed.cpa,
+          roas: parsed.roas,
+          reach: parsed.reach,
+          frequency: parsed.frequency,
+          cpm: parsed.cpm,
+          profileVisits: parsed.profileVisits,
+          retentionPct: parsed.retentionPct,
+          followersGained: parsed.followersGained,
+          cps: parsed.cps,
+          landingPageViews: parsed.landingPageViews,
+          rawRecord: rawItem,
+          lineage
+        };
+      } catch (itemErr) {
+        console.warn('Failed to parse individual adset item, returning safe default:', itemErr);
+        return {
+          id: rawItem.id,
+          campaign_id: rawItem.campaign_id || rawItem.campaign?.id || '',
+          campaign_name: rawItem.campaign?.name || 'Campanha Meta',
+          name: rawItem.name || 'Conjunto Meta',
+          status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
+          effective_status: rawItem.effective_status || rawItem.status || 'PAUSED',
+          deliveryInfo: { code: 'ACTIVE' as const, label: 'Ativo', badgeColor: 'green' as const },
+          targeting_summary: 'Brasil | 18-65+ anos',
+          daily_budget: rawItem.daily_budget ? parseFloat(rawItem.daily_budget) / 100 : null,
+          lifetime_budget: rawItem.lifetime_budget ? parseFloat(rawItem.lifetime_budget) / 100 : null,
+          spend: null,
+          impressions: null,
+          clicks: null,
+          ctr: null,
+          cpc: null,
+          conversions: null,
+          resultLabel: 'Leads',
+          cpa: null,
+          roas: null,
+          reach: null,
+          frequency: null,
+          cpm: null,
+          profileVisits: null,
+          retentionPct: null,
+          followersGained: null,
+          cps: null,
+          landingPageViews: null,
+          rawRecord: rawItem
+        };
       }
-
-      const lineage: DataLineage = {
-        source: 'META_MARKETING_API',
-        endpoint: `${actId}/adsets`,
-        apiVersion: DEFAULT_API_VERSION,
-        fetchedAt,
-        accountId: config.selectedAccountId,
-        level: 'ADSET',
-        recordId: rawItem.id,
-        rawRecord: rawItem,
-        reconciliationStatus: 'VALID'
-      };
-
-      rawAuditStore.set(`ADSET:${rawItem.id}`, { raw: rawItem, lineage });
-
-      return {
-        id: rawItem.id,
-        campaign_id: rawItem.campaign_id || rawItem.campaign?.id || '',
-        campaign_name: rawItem.campaign?.name || 'Campanha Meta',
-        name: rawItem.name,
-        status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
-        effective_status: rawItem.effective_status || rawItem.status,
-        deliveryInfo,
-        targeting_summary: targetingSummary,
-        daily_budget: rawItem.daily_budget ? parseFloat(rawItem.daily_budget) / 100 : null,
-        lifetime_budget: rawItem.lifetime_budget ? parseFloat(rawItem.lifetime_budget) / 100 : null,
-        spend: parsed.spend,
-        impressions: parsed.impressions,
-        clicks: parsed.clicks,
-        ctr: parsed.ctr,
-        cpc: parsed.cpc,
-        cpm: parsed.cpm,
-        reach: parsed.reach,
-        frequency: parsed.frequency,
-        conversions: parsed.conversions,
-        resultLabel: parsed.resultLabel,
-        cpa: parsed.cpa,
-        profileVisits: parsed.profileVisits,
-        retentionPct: parsed.retentionPct,
-        followersGained: parsed.followersGained,
-        cps: parsed.cps,
-        landingPageViews: parsed.landingPageViews,
-        roas: parsed.roas,
-        rawRecord: rawItem,
-        lineage
-      };
     });
 
     if (result.length > 0) {
@@ -1111,64 +1145,101 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
 
     // 3. LEFT JOIN: Merge Master List with Period Insights
     const result = rawAds.map((rawItem: any) => {
-      const periodInsight = adInsightsMap.get(rawItem.id);
-      const itemWithInsight = {
-        ...rawItem,
-        insights: periodInsight ? { data: [periodInsight] } : { data: [] }
-      };
+      try {
+        const periodInsight = adInsightsMap.get(rawItem.id);
+        const itemWithInsight = {
+          ...rawItem,
+          insights: periodInsight ? { data: [periodInsight] } : { data: [] }
+        };
 
-      const parsed = extractNormalizedMetrics(itemWithInsight);
-      const deliveryInfo = resolveDeliveryStatus(rawItem, 'AD');
-      const creative = rawItem.creative || {};
-      const fetchedAt = new Date().toISOString();
+        const parsed = extractNormalizedMetrics(itemWithInsight);
+        const deliveryInfo = resolveDeliveryStatus(rawItem, 'AD');
+        const creative = rawItem.creative || {};
+        const fetchedAt = new Date().toISOString();
 
-      const lineage: DataLineage = {
-        source: 'META_MARKETING_API',
-        endpoint: `${actId}/ads`,
-        apiVersion: DEFAULT_API_VERSION,
-        fetchedAt,
-        accountId: config.selectedAccountId,
-        level: 'AD',
-        recordId: rawItem.id,
-        rawRecord: rawItem,
-        reconciliationStatus: 'VALID'
-      };
+        const lineage: DataLineage = {
+          source: 'META_MARKETING_API',
+          endpoint: `${actId}/ads`,
+          apiVersion: DEFAULT_API_VERSION,
+          fetchedAt,
+          accountId: config.selectedAccountId,
+          level: 'AD',
+          recordId: rawItem.id,
+          rawRecord: rawItem,
+          reconciliationStatus: 'VALID'
+        };
 
-      rawAuditStore.set(`AD:${rawItem.id}`, { raw: rawItem, lineage });
+        rawAuditStore.set(`AD:${rawItem.id}`, { raw: rawItem, lineage });
 
-      return {
-        id: rawItem.id,
-        adset_id: rawItem.adset_id || rawItem.adset?.id || '',
-        adset_name: rawItem.adset?.name || 'Conjunto de Anúncios',
-        campaign_id: rawItem.campaign_id || rawItem.campaign?.id || '',
-        campaign_name: rawItem.campaign?.name || 'Campanha Meta',
-        name: rawItem.name,
-        status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
-        effective_status: rawItem.effective_status || rawItem.status,
-        deliveryInfo,
-        format: 'IMAGE' as 'IMAGE' | 'VIDEO' | 'CAROUSEL',
-        thumbnail_url: creative.thumbnail_url || creative.image_url || 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=300&auto=format&fit=crop&q=80',
-        headline: creative.title || creative.body || 'Criativo Ativo no Meta Ads',
-        spend: parsed.spend,
-        impressions: parsed.impressions,
-        clicks: parsed.clicks,
-        ctr: parsed.ctr,
-        cpc: parsed.cpc,
-        cpm: parsed.cpm,
-        reach: parsed.reach,
-        frequency: parsed.frequency,
-        conversions: parsed.conversions,
-        resultLabel: parsed.resultLabel,
-        cpa: parsed.cpa,
-        profileVisits: parsed.profileVisits,
-        retentionPct: parsed.retentionPct,
-        followersGained: parsed.followersGained,
-        cps: parsed.cps,
-        landingPageViews: parsed.landingPageViews,
-        roas: parsed.roas,
-        rawRecord: rawItem,
-        lineage
-      };
+        return {
+          id: rawItem.id,
+          adset_id: rawItem.adset_id || rawItem.adset?.id || '',
+          adset_name: rawItem.adset?.name || 'Conjunto de Anúncios',
+          campaign_id: rawItem.campaign_id || rawItem.campaign?.id || '',
+          campaign_name: rawItem.campaign?.name || 'Campanha Meta',
+          name: rawItem.name || `Anúncio ${rawItem.id}`,
+          status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
+          effective_status: rawItem.effective_status || rawItem.status || 'PAUSED',
+          deliveryInfo,
+          format: 'IMAGE' as 'IMAGE' | 'VIDEO' | 'CAROUSEL',
+          thumbnail_url: creative.thumbnail_url || creative.image_url || 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=300&auto=format&fit=crop&q=80',
+          headline: creative.title || creative.body || 'Criativo Ativo no Meta Ads',
+          spend: parsed.spend,
+          impressions: parsed.impressions,
+          clicks: parsed.clicks,
+          ctr: parsed.ctr,
+          cpc: parsed.cpc,
+          cpm: parsed.cpm,
+          reach: parsed.reach,
+          frequency: parsed.frequency,
+          conversions: parsed.conversions,
+          resultLabel: parsed.resultLabel,
+          cpa: parsed.cpa,
+          profileVisits: parsed.profileVisits,
+          retentionPct: parsed.retentionPct,
+          followersGained: parsed.followersGained,
+          cps: parsed.cps,
+          landingPageViews: parsed.landingPageViews,
+          roas: parsed.roas,
+          rawRecord: rawItem,
+          lineage
+        };
+      } catch (itemErr) {
+        console.warn('Failed to parse individual ad item, returning safe default:', itemErr);
+        const creative = rawItem.creative || {};
+        return {
+          id: rawItem.id,
+          adset_id: rawItem.adset_id || rawItem.adset?.id || '',
+          adset_name: rawItem.adset?.name || 'Conjunto de Anúncios',
+          campaign_id: rawItem.campaign_id || rawItem.campaign?.id || '',
+          campaign_name: rawItem.campaign?.name || 'Campanha Meta',
+          name: rawItem.name || 'Anúncio Meta',
+          status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
+          effective_status: rawItem.effective_status || rawItem.status || 'PAUSED',
+          deliveryInfo: { code: 'ACTIVE' as const, label: 'Ativo', badgeColor: 'green' as const },
+          format: 'IMAGE' as 'IMAGE' | 'VIDEO' | 'CAROUSEL',
+          thumbnail_url: creative.thumbnail_url || creative.image_url || 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=300&auto=format&fit=crop&q=80',
+          headline: creative.title || creative.body || 'Criativo Ativo no Meta Ads',
+          spend: null,
+          impressions: null,
+          clicks: null,
+          ctr: null,
+          cpc: null,
+          cpm: null,
+          reach: null,
+          frequency: null,
+          conversions: null,
+          resultLabel: 'Leads',
+          cpa: null,
+          profileVisits: null,
+          retentionPct: null,
+          followersGained: null,
+          cps: null,
+          landingPageViews: null,
+          roas: null,
+          rawRecord: rawItem
+        };
+      }
     });
 
     if (result.length > 0) {

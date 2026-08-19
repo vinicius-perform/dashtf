@@ -164,12 +164,15 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
 
   const handleSelectCampaign = (campaignId: string) => {
     setSelectedCampaignId(campaignId);
+    setSelectedCampaignIds([campaignId]);
     setSelectedAdSetId(undefined);
+    setSelectedAdSetIds([]);
     setActiveLevel('conjuntos');
   };
 
   const handleSelectAdSet = (adsetId: string) => {
     setSelectedAdSetId(adsetId);
+    setSelectedAdSetIds([adsetId]);
     setActiveLevel('anuncios');
   };
 
