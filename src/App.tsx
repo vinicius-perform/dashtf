@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
-import { DashboardView } from './components/DashboardView';
+import { GerenciadorView } from './components/GerenciadorView';
 import { IntegrationsView } from './components/IntegrationsView';
+import { CrmLeadsView } from './components/CrmLeadsView';
+import { CreativesView } from './components/CreativesView';
 import { MetaDebugModal } from './components/MetaDebugModal';
 import { 
   getSavedMetaConfig, 
@@ -16,12 +18,15 @@ import {
   extractLeadsFromActions
 } from './services/metaDataEngine';
 import { 
+  fetchUserMetaToken 
+} from './services/userIntegrationService';
+import { 
   MetaConfig, 
   MetaAdAccount, 
   MetaCampaign, 
   MetaAdSet, 
   MetaAd, 
-  DashboardSummary 
+  GerenciadorSummary 
 } from './types/meta';
 
 import { LoginView } from './components/LoginView';
@@ -40,7 +45,8 @@ export function App() {
   const [session, setSession] = useState<any>(null);
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
 
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'integracoes'>('dashboard');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'gerenciador' | 'leads' | 'criativos' | 'integracoes'>('gerenciador');
   const [activeLevel, setActiveLevel] = useState<string>('campanhas');
   const [metaConfig, setMetaConfig] = useState<MetaConfig>(getSavedMetaConfig());
   const [accounts, setAccounts] = useState<MetaAdAccount[]>([]);
@@ -54,7 +60,7 @@ export function App() {
   const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
   const [adsets, setAdSets] = useState<MetaAdSet[]>([]);
   const [ads, setAds] = useState<MetaAd[]>([]);
-  const [summary, setSummary] = useState<DashboardSummary>(computeSummaryMetrics([]));
+  const [summary, setSummary] = useState<GerenciadorSummary>(computeSummaryMetrics([]));
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
@@ -74,6 +80,30 @@ export function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // 1.b Load User Meta Integration Token from Supabase user_integrations table on Session
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    let isMounted = true;
+    const userId = session.user.id;
+    const userEmail = session.user.email;
+
+    fetchUserMetaToken(userId, userEmail).then((dbToken) => {
+      if (!isMounted) return;
+      if (dbToken) {
+        setMetaConfig((prev) => ({
+          ...prev,
+          accessToken: dbToken,
+          isConnected: true
+        }));
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session?.user?.id]);
 
   // Trigger 60-day retention purger on app mount
   useEffect(() => {
@@ -118,12 +148,13 @@ export function App() {
       };
 
       // Hybrid Orchestration: 100% DB for past, Live for Today, Combined for Ranges
-      const [campData, adsetData, adData, accInsights] = await Promise.all([
+      const [campData, adsetData, accInsights] = await Promise.all([
         fetchHybridCampaigns(currentConfig, dateRange, fetchCampaigns),
         fetchAdSets(currentConfig, undefined, dateRange),
-        fetchAds(currentConfig, undefined, dateRange),
         fetchAccountInsights(currentConfig, dateRange)
       ]);
+
+      const adData = await fetchAds(currentConfig, adsetData, dateRange);
 
       setCampaigns(campData);
       setAdSets(adsetData);
@@ -239,6 +270,8 @@ export function App() {
         activeLevel={activeLevel}
         setActiveLevel={setActiveLevel}
         onLogout={handleLogout}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
 
       {/* Main Content Area */}
@@ -262,8 +295,8 @@ export function App() {
 
         {/* Dynamic Screen View */}
         <main className="flex-1 pb-12">
-          {activeTab === 'dashboard' ? (
-            <DashboardView
+          {activeTab === 'gerenciador' && (
+            <GerenciadorView
               summary={summary}
               campaigns={campaigns}
               adsets={adsets}
@@ -273,8 +306,24 @@ export function App() {
               onToggleCampaignStatus={handleToggleCampaignStatus}
               isLoading={isLoading}
             />
-          ) : (
+          )}
+
+          {activeTab === 'leads' && (
+            <CrmLeadsView isLoading={isLoading} />
+          )}
+
+          {activeTab === 'criativos' && (
+            <CreativesView
+              ads={ads}
+              campaigns={campaigns}
+              adsets={adsets}
+              isLoading={isLoading}
+            />
+          )}
+
+          {activeTab === 'integracoes' && (
             <IntegrationsView
+              session={session}
               metaConfig={metaConfig}
               setMetaConfig={setMetaConfig}
               accounts={accounts}

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 
-const STORAGE_KEY = 'meta_dashboard_col_widths';
+const STORAGE_KEY = 'meta_gerenciador_col_widths';
 
 export const DEFAULT_WIDTHS: Record<string, number> = {
   checkbox: 40,

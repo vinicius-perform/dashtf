@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MetaConfig, MetaAdAccount, MetaBusinessManager } from '../types/meta';
 import { 
   saveMetaConfig, 
@@ -6,6 +6,10 @@ import {
   fetchAdAccountsForBM,
   validateBMAndAccountRelationship
 } from '../services/metaDataEngine';
+import { 
+  saveUserMetaToken, 
+  maskToken 
+} from '../services/userIntegrationService';
 import { 
   CheckCircle2, 
   AlertTriangle, 
@@ -20,6 +24,7 @@ import {
 } from 'lucide-react';
 
 interface IntegrationsViewProps {
+  session?: any;
   metaConfig: MetaConfig;
   setMetaConfig: React.Dispatch<React.SetStateAction<MetaConfig>>;
   accounts: MetaAdAccount[];
@@ -61,6 +66,7 @@ const BM_ACCOUNTS_DICTIONARY: Record<string, MetaAdAccount[]> = {
 };
 
 export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
+  session,
   metaConfig,
   setMetaConfig,
   setAccounts,
@@ -68,6 +74,13 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
 }) => {
   const [tokenInput, setTokenInput] = useState(metaConfig.accessToken);
   const [bms, setBms] = useState<MetaBusinessManager[]>(INITIAL_BUSINESS_MANAGERS);
+
+  // Sync tokenInput when metaConfig.accessToken changes
+  useEffect(() => {
+    if (metaConfig.accessToken) {
+      setTokenInput(metaConfig.accessToken);
+    }
+  }, [metaConfig.accessToken]);
 
   // Initial Selected BM (Level 1: Real Business Manager)
   const [selectedBmId, setSelectedBmId] = useState<string>(metaConfig.businessManagerId || '1098475893049001');
@@ -90,14 +103,23 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
   const [showToken, setShowToken] = useState(false);
   const [showConfirmChange, setShowConfirmChange] = useState(false);
 
+  // Helper to extract effective unmasked token
+  const getEffectiveToken = () => {
+    if (tokenInput.includes('...') && metaConfig.accessToken) {
+      return metaConfig.accessToken;
+    }
+    return tokenInput.trim();
+  };
+
   // LAZY LOADING LEVEL 1: Fetch Business Managers ONLY (GET /me/businesses)
   const handleLoadBMsOnly = async () => {
-    if (!tokenInput.trim()) {
+    const activeToken = getEffectiveToken();
+    if (!activeToken) {
       setTestResult({ success: false, message: 'Insira um Token de Acesso da Meta Marketing API válido.' });
       return;
     }
     setIsLoadingBms(true);
-    const fetched = await fetchBusinessManagers(tokenInput);
+    const fetched = await fetchBusinessManagers(activeToken);
     setIsLoadingBms(false);
     
     if (fetched.length > 0) {
@@ -123,8 +145,9 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
     setIsLoadingAccounts(true);
     let fetchedAccs: MetaAdAccount[] = [];
 
-    if (tokenInput.trim()) {
-      fetchedAccs = await fetchAdAccountsForBM(tokenInput, bmId);
+    const activeToken = getEffectiveToken();
+    if (activeToken) {
+      fetchedAccs = await fetchAdAccountsForBM(activeToken, bmId);
     }
 
     // Fallback to BM specific dictionary matching exact screenshot if API returned empty for this BM
@@ -152,7 +175,7 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
     acc.id.includes(accountSearch)
   );
 
-  const executeSaveConfig = () => {
+  const executeSaveConfig = async () => {
     // BACKEND / ENGINE STRICT SECURITY VALIDATION
     const relCheck = validateBMAndAccountRelationship(selectedBmId, selectedAccountId, bmAccounts);
     if (!relCheck.valid) {
@@ -167,9 +190,16 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
 
     const nowStr = new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR');
 
+    const finalToken = getEffectiveToken();
+
+    // Persist token to Supabase user_integrations table for current user
+    if (session?.user?.id) {
+      await saveUserMetaToken(session.user.id, finalToken);
+    }
+
     const updatedConfig: MetaConfig = {
       ...metaConfig,
-      accessToken: tokenInput.trim(),
+      accessToken: finalToken,
       businessManagerId: selectedBmId,
       businessManagerName: bmObj ? bmObj.name : `Portfólio Empresarial ${selectedBmId}`,
       selectedAccountId: selectedAccountId,
@@ -187,7 +217,7 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
     setShowConfirmChange(false);
     setTestResult({ 
       success: true, 
-      message: `Mapeamento correto! Portfólio Empresarial (${updatedConfig.businessManagerName}) → Conta de Anúncios (${updatedConfig.accountName}) vinculados com sucesso.` 
+      message: `Mapeamento correto e Token sincronizado no Supabase! Portfólio Empresarial (${updatedConfig.businessManagerName}) → Conta de Anúncios (${updatedConfig.accountName}) vinculados com sucesso.` 
     });
     onRefreshData();
   };
@@ -260,7 +290,7 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-white tracking-tight uppercase">
-                CONTA ATIVA DO DASHBOARD
+                CONTA ATIVA DO GERENCIADOR
               </h3>
               <p className="text-xs text-brand-textMuted">
                 Identificadores numéricos reais validados na Graph API v19.0
@@ -331,7 +361,7 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
                 <div className="relative">
                   <input
                     type={showToken ? 'text' : 'password'}
-                    value={tokenInput}
+                    value={showToken ? maskToken(tokenInput) : tokenInput}
                     onChange={(e) => setTokenInput(e.target.value)}
                     placeholder="Cole seu token iniciado com EAAB... ou EAA..."
                     className="w-full bg-brand-bg border border-brand-border rounded-lg px-3.5 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-brand-neon font-mono"
@@ -456,7 +486,7 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
                   className="flex items-center gap-2 bg-brand-neon text-black font-bold text-xs px-6 py-3 rounded-lg hover:bg-brand-neonHover transition-all shadow-md shadow-brand-neon/20 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Check className="w-4 h-4" />
-                  <span>SALVAR CONTA DO DASHBOARD</span>
+                  <span>SALVAR CONTA DO GERENCIADOR</span>
                 </button>
               </div>
             </form>
@@ -490,7 +520,7 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
             </div>
 
             <p className="text-xs text-zinc-300 leading-relaxed">
-              Você está alterando a conta utilizada pelo dashboard. Os dados exibidos passarão a representar exclusivamente a nova conta de anúncios vinculada à BM selecionada.
+              Você está alterando a conta utilizada pelo gerenciador. Os dados exibidos passarão a representar exclusivamente a nova conta de anúncios vinculada à BM selecionada.
             </p>
 
             <div className="flex items-center justify-end gap-3 pt-2">

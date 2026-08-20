@@ -55,8 +55,8 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Title & Subtitle */}
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-3">
-            {activeTab === 'dashboard' ? 'Visão Geral' : 'Integrações Meta'}
-            {activeTab === 'dashboard' && (
+            {activeTab === 'gerenciador' ? 'Visão Geral' : 'Integrações Meta'}
+            {activeTab === 'gerenciador' && (
               <span className="text-xs bg-brand-neon/15 text-brand-neon font-semibold px-2.5 py-1 rounded-full border border-brand-neon/30 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-brand-neon animate-pulse" />
                 Meta Ads API
@@ -64,7 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </h1>
           <p className="text-xs text-brand-textMuted mt-0.5">
-            {activeTab === 'dashboard'
+            {activeTab === 'gerenciador'
               ? `Acompanhe suas métricas principais em um só lugar • Última atualização: ${displayTimestamp}`
               : 'Conecte sua conta de anúncios do Facebook Ads e sincronize dados reais da sua operação'}
           </p>
@@ -124,7 +124,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Filter Control Bar */}
-      {activeTab === 'dashboard' && (
+      {activeTab === 'gerenciador' && (
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <div className="flex flex-wrap items-center gap-2">
             {/* Interactive Date Range Picker */}

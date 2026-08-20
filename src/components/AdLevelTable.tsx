@@ -41,7 +41,7 @@ export const AdLevelTable: React.FC<AdLevelTableProps> = React.memo(({
   const { widths, startResizing } = useColumnResize();
 
   const filteredAds = ads.filter((ad) => {
-    const matchesAdSet = !selectedAdSetId || ad.adset_id === selectedAdSetId;
+    const matchesAdSet = !selectedAdSetId || String(ad.adset_id) === String(selectedAdSetId);
     const matchesSearch = ad.name.toLowerCase().includes(search.toLowerCase()) || ad.headline.toLowerCase().includes(search.toLowerCase());
     const matchesFormat = formatFilter === 'ALL' || ad.format === formatFilter;
     return matchesAdSet && matchesSearch && matchesFormat;

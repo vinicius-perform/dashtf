@@ -49,6 +49,49 @@ export const CampaignLevelTable: React.FC<CampaignLevelTableProps> = React.memo(
   const visibleIds = sortedCampaigns.map(c => c.id);
   const isAllVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedCampaignIds.includes(id));
 
+  const renderCampaignBudget = (c: MetaCampaign) => {
+    if (c.daily_budget && c.daily_budget > 0) {
+      return (
+        <div className="w-full min-w-0 text-right">
+          <div className="font-bold text-white text-xs truncate">
+            {formatCurrency(c.daily_budget)}
+          </div>
+          <div className="text-[10px] text-zinc-400 font-normal mt-0.5 truncate">
+            Diário
+          </div>
+        </div>
+      );
+    }
+
+    if (c.lifetime_budget && c.lifetime_budget > 0) {
+      return (
+        <div className="w-full min-w-0 text-right">
+          <div className="font-bold text-white text-xs truncate">
+            {formatCurrency(c.lifetime_budget)}
+          </div>
+          <div className="text-[10px] text-zinc-400 font-normal mt-0.5 truncate">
+            Total
+          </div>
+        </div>
+      );
+    }
+
+    // ABO Fallback matching Meta Ads Manager standard with responsive column resizing
+    return (
+      <div className="w-full min-w-0 text-right">
+        <span 
+          className="text-xs font-normal text-zinc-300 truncate block w-full text-ellipsis overflow-hidden whitespace-nowrap cursor-help"
+          title="Usando o orçamento do conjunto de anúncios"
+        >
+          Usando o orçamento do conjunto de anúncios
+        </span>
+        <span className="text-[10px] text-zinc-400 font-normal mt-0.5 truncate block w-full text-ellipsis overflow-hidden whitespace-nowrap">
+          Não compartilhado
+        </span>
+      </div>
+    );
+  };
+
   return (
     <div className="bg-brand-card border border-brand-border rounded-xl overflow-hidden shadow-lg">
       {/* Table Header Controls */}
@@ -212,8 +255,8 @@ export const CampaignLevelTable: React.FC<CampaignLevelTableProps> = React.memo(
                   </td>
 
                   {/* Orçamento */}
-                  <td className="py-3.5 px-4 text-right text-zinc-300">
-                    {c.daily_budget ? formatCurrency(c.daily_budget) : 'CBO / Livre'}
+                  <td className="py-3.5 px-4 text-right min-w-0 overflow-hidden">
+                    {renderCampaignBudget(c)}
                   </td>
 
                   {/* Valor Gasto */}

@@ -70,6 +70,19 @@ export function getLast7DaysRange(timezone = 'America/Sao_Paulo') {
   };
 }
 
+export function getLast30DaysRange(timezone = 'America/Sao_Paulo') {
+  const todayInfo = getDateInAccountTimezone(new Date(), timezone);
+  const startD = new Date();
+  startD.setDate(startD.getDate() - 30);
+  const startInfo = getDateInAccountTimezone(startD, timezone);
+
+  return {
+    startDate: startInfo.dateStr,
+    endDate: todayInfo.dateStr,
+    label: `${startInfo.shortDate} - ${todayInfo.shortDate}`
+  };
+}
+
 export function getThisMonthRange(timezone = 'America/Sao_Paulo') {
   const todayInfo = getDateInAccountTimezone(new Date(), timezone);
   const mStr = String(todayInfo.month).padStart(2, '0');

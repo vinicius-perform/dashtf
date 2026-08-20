@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Lock, Mail, Eye, EyeOff, Loader2, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, Loader2, AlertCircle, ArrowRight } from 'lucide-react';
 import { Logo } from './Logo';
 
 interface LoginViewProps {
@@ -94,15 +94,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         
         {/* Top Header with Brand Logo */}
         <div className="flex flex-col items-center text-center space-y-3">
-          <div className="p-3 bg-brand-sidebar border border-brand-border rounded-xl shadow-inner mb-1">
+          <div className="p-3 bg-brand-sidebar border border-brand-border rounded-xl shadow-inner">
             <Logo />
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-white tracking-tight">Acesso ao Dashboard</h1>
-            <p className="text-xs text-brand-textMuted mt-1">
-              Entre com suas credenciais para gerenciar suas métricas do Meta Ads
-            </p>
-          </div>
+          <h1 className="text-xl font-bold text-white tracking-tight">Acesso ao Gerenciador</h1>
         </div>
 
         {/* Error Feedback Banner */}
@@ -163,14 +158,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             </div>
           </div>
 
-          {/* Subtext info */}
-          <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-1">
-            <span className="flex items-center gap-1.5 text-zinc-400">
-              <ShieldCheck className="w-3.5 h-3.5 text-brand-neon" />
-              Conexão Segura Supabase SSL
-            </span>
-          </div>
-
           {/* Primary Action Button */}
           <button
             type="submit"
@@ -184,20 +171,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               </>
             ) : (
               <>
-                <span>Entrar no Dashboard</span>
+                <span>Entrar no Gerenciador</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
         </form>
-
-        {/* Footer info */}
-        <div className="pt-4 border-t border-brand-border/60 text-center">
-          <p className="text-[10px] text-zinc-500 font-medium">
-            Fazendo Acontecer™ Performance & Analytics • v2.0
-          </p>
-        </div>
       </div>
     </div>
   );
 };
+

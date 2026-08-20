@@ -9,6 +9,13 @@ export interface MetaAdAccount {
   business_name?: string;
 }
 
+export interface FilterTag {
+  id: string;
+  type: 'NAME' | 'ID' | 'STATUS' | 'SPEND';
+  label: string;
+  value: string;
+}
+
 export interface MetaBusinessManager {
   id: string;
   name: string;
@@ -142,7 +149,7 @@ export interface MetaAd {
   lineage?: DataLineage;
 }
 
-export interface DashboardSummary {
+export interface GerenciadorSummary {
   investimentoTotal: number | null;
   impressioesTotal: number | null;
   cliquesTotal: number | null;

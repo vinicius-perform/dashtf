@@ -4,7 +4,7 @@ import {
   MetaCampaign, 
   MetaAdSet, 
   MetaAd, 
-  DashboardSummary 
+  GerenciadorSummary 
 } from '../types/meta';
 import { MetricCard } from './MetricCard';
 import { CampaignLevelTable } from './CampaignLevelTable';
@@ -13,20 +13,14 @@ import { AdLevelTable } from './AdLevelTable';
 import { 
   Megaphone, 
   Layers, 
-  Target, 
-  ChevronRight, 
-  AlertCircle,
-  HelpCircle,
-  Maximize2
+  Target
 } from 'lucide-react';
 
-import { SavedViewsBar } from './SavedViewsBar';
 import { OmniboxSearch } from './OmniboxSearch';
-import { EditViewModal } from './EditViewModal';
-import { SavedView, FilterTag, getSavedViews } from '../services/meta/savedViewsStore';
+import { FilterTag } from '../types/meta';
 
-interface DashboardViewProps {
-  summary: DashboardSummary;
+interface GerenciadorViewProps {
+  summary: GerenciadorSummary;
   campaigns: MetaCampaign[];
   adsets: MetaAdSet[];
   ads: MetaAd[];
@@ -36,7 +30,7 @@ interface DashboardViewProps {
   isLoading?: boolean;
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
+export const GerenciadorView: React.FC<GerenciadorViewProps> = React.memo(({
   summary,
   campaigns,
   adsets,
@@ -49,26 +43,13 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | undefined>();
   const [selectedAdSetId, setSelectedAdSetId] = useState<string | undefined>();
 
-  // Saved Views & Omnibox States
-  const [views, setViews] = useState<SavedView[]>(getSavedViews());
-  const [activeViewId, setActiveViewId] = useState<string>('view_all');
+  // Omnibox Active Filters State
   const [activeFilters, setActiveFilters] = useState<FilterTag[]>([]);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [targetModalView, setTargetModalView] = useState<SavedView | undefined>();
 
   // Meta Ads Style Multi-Select Checkbox States
   const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
   const [selectedAdSetIds, setSelectedAdSetIds] = useState<string[]>([]);
   const [selectedAdIds, setSelectedAdIds] = useState<string[]>([]);
-
-  const handleSelectView = (view: SavedView) => {
-    setActiveViewId(view.id);
-    if (view.config?.filters) {
-      setActiveFilters(view.config.filters);
-    } else {
-      setActiveFilters([]);
-    }
-  };
 
   const handleAddFilter = (tag: FilterTag) => {
     setActiveFilters((prev) => [...prev, tag]);
@@ -179,15 +160,16 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
   // Cascading Drill-Down + Omnibox Tags Filtering
   const filteredAdSetsForTab = React.useMemo(() => {
     let list = adsets;
-    if (selectedCampaignIds.length > 0) {
-      list = list.filter(as => selectedCampaignIds.includes(as.campaign_id));
+    const selCampIds = selectedCampaignIds.map(id => String(id));
+    if (selCampIds.length > 0) {
+      list = list.filter(as => selCampIds.includes(String(as.campaign_id)));
     }
     if (!activeFilters || activeFilters.length === 0) return list;
     return list.filter((item) => {
       return activeFilters.every((tag) => {
         const valLower = (tag.value || '').toLowerCase();
         if (tag.type === 'NAME') return (item.name || '').toLowerCase().includes(valLower);
-        if (tag.type === 'ID') return (item.id || '').toLowerCase().includes(valLower);
+        if (tag.type === 'ID') return String(item.id).toLowerCase().includes(valLower);
         if (tag.type === 'STATUS') {
           const statusLabel = (item.deliveryInfo?.label || item.status || '').toLowerCase();
           return statusLabel.includes(valLower);
@@ -203,17 +185,22 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
 
   const filteredAdsForTab = React.useMemo(() => {
     let list = ads;
-    if (selectedAdSetIds.length > 0) {
-      list = list.filter(ad => selectedAdSetIds.includes(ad.adset_id));
-    } else if (selectedCampaignIds.length > 0) {
-      list = list.filter(ad => selectedCampaignIds.includes(ad.campaign_id));
+    const selAdSetIds = selectedAdSetIds.map(id => String(id));
+    const selCampIds = selectedCampaignIds.map(id => String(id));
+
+    if (selAdSetIds.length > 0) {
+      list = list.filter(ad => selAdSetIds.includes(String(ad.adset_id)));
+    } else if (selCampIds.length > 0) {
+      list = list.filter(ad => selCampIds.includes(String(ad.campaign_id)));
     }
+
     if (!activeFilters || activeFilters.length === 0) return list;
+
     return list.filter((item) => {
       return activeFilters.every((tag) => {
         const valLower = (tag.value || '').toLowerCase();
         if (tag.type === 'NAME') return (item.name || '').toLowerCase().includes(valLower);
-        if (tag.type === 'ID') return (item.id || '').toLowerCase().includes(valLower);
+        if (tag.type === 'ID') return String(item.id).toLowerCase().includes(valLower);
         if (tag.type === 'STATUS') {
           const statusLabel = (item.deliveryInfo?.label || item.status || '').toLowerCase();
           return statusLabel.includes(valLower);
@@ -239,7 +226,7 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
   }, [activeLevel, filteredCampaignsByTags, filteredAdSetsForTab, filteredAdsForTab]);
 
   // Dynamic Client-side KPI Aggregation (Derived State from Omnibox & Active Level Filters)
-  const aggregatedKPIs = React.useMemo<DashboardSummary>(() => {
+  const aggregatedKPIs = React.useMemo<GerenciadorSummary>(() => {
     const hasFilters = (activeFilters && activeFilters.length > 0) || 
                       selectedCampaignIds.length > 0 || 
                       selectedAdSetIds.length > 0 || 
@@ -285,9 +272,6 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
       cpaMedio
     };
   }, [activeVisibleItems, activeFilters, selectedCampaignIds, selectedAdSetIds, selectedAdIds, summary]);
-
-  const selectedCampaignName = campaigns.find(c => c.id === selectedCampaignId)?.name;
-  const selectedAdSetName = adsets.find(as => as.id === selectedAdSetId)?.name;
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
@@ -342,18 +326,8 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
         />
       </div>
 
-      {/* Saved Views Bar & Omnibox Smart Search (Meta Ads Manager Standard) */}
-      <div className="space-y-3 bg-brand-card p-4 rounded-2xl border border-brand-border shadow-lg">
-        <SavedViewsBar
-          views={views}
-          activeViewId={activeViewId}
-          onSelectView={handleSelectView}
-          onOpenEditModal={(view) => {
-            setTargetModalView(view);
-            setIsEditModalOpen(true);
-          }}
-        />
-
+      {/* Omnibox Smart Search */}
+      <div className="bg-brand-card p-4 rounded-2xl border border-brand-border shadow-lg">
         <OmniboxSearch
           activeFilters={activeFilters}
           onAddFilter={handleAddFilter}
@@ -514,17 +488,8 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
           />
         )}
       </div>
-
-      {/* Modal Editar Visualização */}
-      <EditViewModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        targetView={targetModalView}
-        currentFilters={activeFilters}
-        onApplyView={handleSelectView}
-      />
     </div>
   );
 });
 
-DashboardView.displayName = 'DashboardView';
+GerenciadorView.displayName = 'GerenciadorView';

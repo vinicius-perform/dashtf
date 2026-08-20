@@ -5,6 +5,7 @@ import {
   getTodayRange, 
   getYesterdayRange, 
   getLast7DaysRange, 
+  getLast30DaysRange,
   getThisMonthRange, 
   getLastMonthRange,
   formatDateRangeLabel
@@ -31,19 +32,28 @@ const WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
 
 export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChange, timezone = 'America/Sao_Paulo' }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [tempStart, setTempStart] = useState<string | null>(null);
   
   const todayRange = getTodayRange(timezone);
-  const todayParts = todayRange.startDate.split('-');
-  const initialYear = parseInt(todayParts[0]);
-  const initialMonth = parseInt(todayParts[1]) - 1;
-  const initialDay = parseInt(todayParts[2]);
+  const todayParts = (value.startDate || todayRange.startDate).split('-');
+  const initialYear = parseInt(todayParts[0]) || new Date().getFullYear();
+  const initialMonth = (parseInt(todayParts[1]) || (new Date().getMonth() + 1)) - 1;
 
-  const [startDay, setStartDay] = useState<number>(initialDay);
-  const [endDay, setEndDay] = useState<number>(initialDay);
   const [startMonth, setStartMonth] = useState<number>(initialMonth);
   const [startYear, setStartYear] = useState<number>(initialYear);
 
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Sync calendar display month when value changes
+  useEffect(() => {
+    if (value.startDate) {
+      const parts = value.startDate.split('-');
+      if (parts.length === 3) {
+        setStartYear(parseInt(parts[0]));
+        setStartMonth(parseInt(parts[1]) - 1);
+      }
+    }
+  }, [value.startDate]);
 
   // Close when clicking outside
   useEffect(() => {
@@ -64,6 +74,8 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChang
       range = getYesterdayRange(timezone);
     } else if (type === '7d') {
       range = getLast7DaysRange(timezone);
+    } else if (type === '30d') {
+      range = getLast30DaysRange(timezone);
     } else if (type === 'este_mes') {
       range = getThisMonthRange(timezone);
     } else if (type === 'mes_anterior') {
@@ -73,48 +85,48 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChang
     }
 
     range.label = formatDateRangeLabel(range.startDate, range.endDate, timezone);
+    setTempStart(null);
 
     const sParts = range.startDate.split('-');
     setStartYear(parseInt(sParts[0]));
     setStartMonth(parseInt(sParts[1]) - 1);
-    setStartDay(parseInt(sParts[2]));
-
-    const eParts = range.endDate.split('-');
-    setEndDay(parseInt(eParts[2]));
 
     onChange(range);
   };
 
   const handleDateClick = (dayNum: number, mIdx: number, yNum: number) => {
-    // Range selection logic
-    let newStart = dayNum;
-    let newEnd = dayNum;
-
-    if (dayNum < startDay || mIdx !== startMonth) {
-      setStartDay(dayNum);
-      setEndDay(dayNum);
-      newStart = dayNum;
-      newEnd = dayNum;
-    } else {
-      setEndDay(dayNum);
-      newStart = Math.min(startDay, dayNum);
-      newEnd = Math.max(startDay, dayNum);
-    }
-
-    setStartMonth(mIdx);
-    setStartYear(yNum);
-
     const formatNum = (n: number) => (n < 10 ? `0${n}` : `${n}`);
-    const mStr = formatNum(mIdx + 1);
+    const clickedStr = `${yNum}-${formatNum(mIdx + 1)}-${formatNum(dayNum)}`;
 
-    const startDateStr = `${yNum}-${mStr}-${formatNum(newStart)}`;
-    const endDateStr = `${yNum}-${mStr}-${formatNum(newEnd)}`;
+    if (!tempStart) {
+      // First click: set temporary start date
+      setTempStart(clickedStr);
+      onChange({
+        startDate: clickedStr,
+        endDate: clickedStr,
+        label: formatDateRangeLabel(clickedStr, clickedStr, timezone)
+      });
+    } else {
+      // Second click: finalize range between tempStart and clickedStr
+      const t1 = new Date(`${tempStart}T00:00:00`).getTime();
+      const t2 = new Date(`${clickedStr}T00:00:00`).getTime();
 
-    onChange({
-      startDate: startDateStr,
-      endDate: endDateStr,
-      label: formatDateRangeLabel(startDateStr, endDateStr, timezone)
-    });
+      let finalStart = tempStart;
+      let finalEnd = clickedStr;
+
+      if (t2 < t1) {
+        finalStart = clickedStr;
+        finalEnd = tempStart;
+      }
+
+      setTempStart(null);
+
+      onChange({
+        startDate: finalStart,
+        endDate: finalEnd,
+        label: formatDateRangeLabel(finalStart, finalEnd, timezone)
+      });
+    }
   };
 
   // Helper to render days grid for a given month/year
@@ -133,6 +145,9 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChang
     for (let d = 1; d <= daysInMonth; d++) {
       days.push(d);
     }
+
+    const startMs = value.startDate ? new Date(`${value.startDate}T00:00:00`).getTime() : 0;
+    const endMs = value.endDate ? new Date(`${value.endDate}T00:00:00`).getTime() : 0;
 
     return (
       <div className="space-y-2">
@@ -159,9 +174,13 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChang
 
           {/* Actual Month Days */}
           {days.map((d) => {
-            const isStart = d === startDay && monthIdx === startMonth;
-            const isEnd = d === endDay && monthIdx === startMonth;
-            const isInRange = d >= Math.min(startDay, endDay) && d <= Math.max(startDay, endDay) && monthIdx === startMonth;
+            const formatNum = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+            const cellDateStr = `${yearNum}-${formatNum(monthIdx + 1)}-${formatNum(d)}`;
+            const cellMs = new Date(`${cellDateStr}T00:00:00`).getTime();
+
+            const isStart = cellDateStr === value.startDate;
+            const isEnd = cellDateStr === value.endDate;
+            const isInRange = startMs && endMs && cellMs >= Math.min(startMs, endMs) && cellMs <= Math.max(startMs, endMs);
 
             return (
               <button
@@ -190,7 +209,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChang
 
   return (
     <div className="relative" ref={containerRef}>
-      {/* Date Range Trigger Pill (Matches screenshot with bright neon green border when open) */}
+      {/* Date Range Trigger Pill */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all select-none cursor-pointer ${
@@ -203,38 +222,38 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChang
         <span>{value.label}</span>
       </button>
 
-      {/* Popover Calendar (Exact UI match with screenshot) */}
+      {/* Popover Calendar (Positioned with right-0 to prevent right-edge overflow) */}
       {isOpen && (
-        <div className="absolute left-0 top-full mt-2 bg-[#121214] border border-brand-border rounded-2xl shadow-2xl z-50 p-5 w-[540px] space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute right-0 top-full mt-2 bg-[#121214] border border-brand-border rounded-2xl shadow-2xl z-50 p-5 w-[540px] max-w-[90vw] space-y-4 animate-in fade-in zoom-in-95 duration-150">
           {/* Top Horizontal Preset Tabs */}
-          <div className="flex items-center gap-6 text-xs font-semibold text-zinc-400 border-b border-brand-border/60 pb-3 px-1">
+          <div className="flex items-center gap-6 text-xs font-semibold text-zinc-400 border-b border-brand-border/60 pb-3 px-1 overflow-x-auto">
             <button
               onClick={() => handlePresetSelect('hoje')}
-              className="hover:text-brand-neon transition-colors"
+              className="hover:text-brand-neon transition-colors shrink-0"
             >
               Hoje
             </button>
             <button
               onClick={() => handlePresetSelect('ontem')}
-              className="hover:text-brand-neon transition-colors"
+              className="hover:text-brand-neon transition-colors shrink-0"
             >
               Ontem
             </button>
             <button
               onClick={() => handlePresetSelect('7d')}
-              className="hover:text-brand-neon transition-colors"
+              className="hover:text-brand-neon transition-colors shrink-0"
             >
               Últimos 7 dias
             </button>
             <button
               onClick={() => handlePresetSelect('este_mes')}
-              className="text-white font-bold underline decoration-brand-neon decoration-2 underline-offset-4"
+              className="text-white font-bold underline decoration-brand-neon decoration-2 underline-offset-4 shrink-0"
             >
               Este mês
             </button>
             <button
               onClick={() => handlePresetSelect('mes_anterior')}
-              className="hover:text-brand-neon transition-colors"
+              className="hover:text-brand-neon transition-colors shrink-0"
             >
               Mês anterior
             </button>
@@ -261,7 +280,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChang
             </button>
 
             {/* Dual Month Side-by-Side Display */}
-            <div className="grid grid-cols-2 gap-8 px-2 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 px-2 pt-1">
               {renderMonthGrid(startMonth, startYear)}
               {renderMonthGrid(nextMonthIdx, nextMonthYear)}
             </div>

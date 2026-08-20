@@ -5,12 +5,12 @@ import {
   MetaCampaign, 
   MetaAdSet, 
   MetaAd, 
-  DashboardSummary,
+  GerenciadorSummary,
   DataLineage,
   DeliveryStatusInfo
 } from '../types/meta';
 
-const STORAGE_CONFIG_KEY = 'fazendo_acontecer_meta_config';
+export const ADMIN_META_TOKEN = 'EAAUCHCxqlm4BSXktFRiKzq7w1aa9ZC8iZApYGfhQNAdvWAdI48pJ7NWdN9xHHb9C38XuKd6qZBEN74fjlZBqRJE3vd7VPGtUXSMAAoLfVaT3R6DiehWmRuZCRcjefmDslZBfWOZB9uuMrHxWHqe99dMWsIn1zRVOLlAx8mJ6B2YUfoSsCfNL85EpZBZBMLWZBqrwZDZD';
 const GRAPH_API_BASE = 'https://graph.facebook.com/v19.0';
 const DEFAULT_API_VERSION = 'v19.0';
 
@@ -37,26 +37,8 @@ export function getAllRawAuditRecords() {
   return Array.from(rawAuditStore.entries()).map(([id, val]) => ({ id, ...val }));
 }
 
-// Safe Meta Config Persistence
+// Default Meta Config Initializer (Cloud Sync Token is loaded dynamically from Supabase user_integrations)
 export function getSavedMetaConfig(): MetaConfig {
-  const raw = localStorage.getItem(STORAGE_CONFIG_KEY);
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      return {
-        accessToken: parsed.accessToken || '',
-        businessManagerId: parsed.businessManagerId || '1098475893049001',
-        businessManagerName: parsed.businessManagerName || 'FazendoAcontecer',
-        selectedAccountId: normalizeAccountId(parsed.selectedAccountId || '1115861513053539'),
-        accountName: parsed.accountName || 'CA02 - FA',
-        currency: parsed.currency || 'BRL',
-        isConnected: Boolean(parsed.isConnected),
-        lastSyncedAt: parsed.lastSyncedAt || new Date().toISOString(),
-        lastValidationAt: parsed.lastValidationAt || new Date().toISOString(),
-        apiVersion: DEFAULT_API_VERSION
-      };
-    } catch {}
-  }
   return {
     accessToken: '',
     businessManagerId: '1098475893049001',
@@ -98,11 +80,7 @@ export function validateBMAndAccountRelationship(
 }
 
 export function saveMetaConfig(config: MetaConfig): void {
-  const cleanConfig = {
-    ...config,
-    selectedAccountId: normalizeAccountId(config.selectedAccountId)
-  };
-  localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(cleanConfig));
+  // Token state persistence is managed in Supabase user_integrations table.
 }
 
 // On-Demand Discovery: Fetch Business Managers
@@ -1116,15 +1094,29 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
     try {
       rawAds = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/ads`, {
         access_token: config.accessToken.trim(),
-        fields: 'id,name,status,effective_status,configured_status,adset_id,adset{name},campaign_id,campaign{name},creative{thumbnail_url,title,body,image_url},ad_review_feedback,issues_info',
+        fields: 'id,name,status,effective_status,configured_status,adset_id,campaign_id,creative',
         limit: 500
       });
+      console.log('✅ Ads da Meta (master list):', rawAds);
       if (rawAds && rawAds.length > 0) {
         masterAdsStore.set(normAcc, rawAds);
       }
     } catch (e) {
-      console.warn('Failed to fetch live master ads list, using fallback store:', e);
-      rawAds = masterAdsStore.get(normAcc) || [];
+      console.warn('⚠️ Primary ads endpoint query failed, retrying basic fields:', e);
+      try {
+        rawAds = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/ads`, {
+          access_token: config.accessToken.trim(),
+          fields: 'id,name,status,effective_status,adset_id,campaign_id',
+          limit: 500
+        });
+        console.log('✅ Ads da Meta (basic fallback list):', rawAds);
+        if (rawAds && rawAds.length > 0) {
+          masterAdsStore.set(normAcc, rawAds);
+        }
+      } catch (e2) {
+        console.error('❌ Failed to fetch live master ads list:', e2);
+        rawAds = masterAdsStore.get(normAcc) || [];
+      }
     }
 
     if ((!rawAds || rawAds.length === 0) && masterAdsStore.has(normAcc)) {
@@ -1143,17 +1135,23 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
       });
       insightsList.forEach((ins: any) => {
         if (ins.ad_id) {
-          adInsightsMap.set(ins.ad_id, ins);
+          adInsightsMap.set(String(ins.ad_id), ins);
         }
       });
     } catch (err) {
       console.warn('Ad level insights query warning:', err);
     }
 
+    const adsetMap = new Map<string, string>();
+    if (adsets && Array.isArray(adsets)) {
+      adsets.forEach(as => adsetMap.set(String(as.id), as.name));
+    }
+
     // 3. LEFT JOIN: Merge Master List with Period Insights
     const result = rawAds.map((rawItem: any) => {
       try {
-        const periodInsight = adInsightsMap.get(rawItem.id);
+        const adIdStr = String(rawItem.id);
+        const periodInsight = adInsightsMap.get(adIdStr);
         const itemWithInsight = {
           ...rawItem,
           insights: periodInsight ? { data: [periodInsight] } : { data: [] }
@@ -1164,6 +1162,9 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
         const creative = rawItem.creative || {};
         const fetchedAt = new Date().toISOString();
 
+        const adsetIdStr = String(rawItem.adset_id || rawItem.adset?.id || '');
+        const campaignIdStr = String(rawItem.campaign_id || rawItem.campaign?.id || '');
+
         const lineage: DataLineage = {
           source: 'META_MARKETING_API',
           endpoint: `${actId}/ads`,
@@ -1171,20 +1172,20 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
           fetchedAt,
           accountId: config.selectedAccountId,
           level: 'AD',
-          recordId: rawItem.id,
+          recordId: adIdStr,
           rawRecord: rawItem,
           reconciliationStatus: 'VALID'
         };
 
-        rawAuditStore.set(`AD:${rawItem.id}`, { raw: rawItem, lineage });
+        rawAuditStore.set(`AD:${adIdStr}`, { raw: rawItem, lineage });
 
         return {
-          id: rawItem.id,
-          adset_id: rawItem.adset_id || rawItem.adset?.id || '',
-          adset_name: rawItem.adset?.name || 'Conjunto de Anúncios',
-          campaign_id: rawItem.campaign_id || rawItem.campaign?.id || '',
-          campaign_name: rawItem.campaign?.name || 'Campanha Meta',
-          name: rawItem.name || `Anúncio ${rawItem.id}`,
+          id: adIdStr,
+          adset_id: adsetIdStr,
+          adset_name: rawItem.adset?.name || adsetMap.get(adsetIdStr) || `Conjunto ${adsetIdStr}`,
+          campaign_id: campaignIdStr,
+          campaign_name: rawItem.campaign?.name || `Campanha ${campaignIdStr}`,
+          name: rawItem.name || `Anúncio ${adIdStr}`,
           status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
           effective_status: rawItem.effective_status || rawItem.status || 'PAUSED',
           deliveryInfo,
@@ -1214,12 +1215,15 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
       } catch (itemErr) {
         console.warn('Failed to parse individual ad item, returning safe default:', itemErr);
         const creative = rawItem.creative || {};
+        const adIdStr = String(rawItem.id);
+        const adsetIdStr = String(rawItem.adset_id || rawItem.adset?.id || '');
+        const campaignIdStr = String(rawItem.campaign_id || rawItem.campaign?.id || '');
         return {
-          id: rawItem.id,
-          adset_id: rawItem.adset_id || rawItem.adset?.id || '',
-          adset_name: rawItem.adset?.name || 'Conjunto de Anúncios',
-          campaign_id: rawItem.campaign_id || rawItem.campaign?.id || '',
-          campaign_name: rawItem.campaign?.name || 'Campanha Meta',
+          id: adIdStr,
+          adset_id: adsetIdStr,
+          adset_name: rawItem.adset?.name || adsetMap.get(adsetIdStr) || `Conjunto ${adsetIdStr}`,
+          campaign_id: campaignIdStr,
+          campaign_name: rawItem.campaign?.name || `Campanha ${campaignIdStr}`,
           name: rawItem.name || 'Anúncio Meta',
           status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
           effective_status: rawItem.effective_status || rawItem.status || 'PAUSED',
@@ -1259,16 +1263,19 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
     const fallbackList = masterAdsStore.get(normAcc) || [];
     return fallbackList.map((rawItem: any) => {
       const creative = rawItem.creative || {};
+      const adIdStr = String(rawItem.id);
+      const adsetIdStr = String(rawItem.adset_id || rawItem.adset?.id || '');
+      const campaignIdStr = String(rawItem.campaign_id || rawItem.campaign?.id || '');
       return {
-        id: rawItem.id,
-        adset_id: rawItem.adset_id || rawItem.adset?.id || '',
-        adset_name: rawItem.adset?.name || 'Conjunto de Anúncios',
-        campaign_id: rawItem.campaign_id || rawItem.campaign?.id || '',
-        campaign_name: rawItem.campaign?.name || 'Campanha Meta',
-        name: rawItem.name,
+        id: adIdStr,
+        adset_id: adsetIdStr,
+        adset_name: rawItem.adset?.name || `Conjunto ${adsetIdStr}`,
+        campaign_id: campaignIdStr,
+        campaign_name: rawItem.campaign?.name || `Campanha ${campaignIdStr}`,
+        name: rawItem.name || `Anúncio ${adIdStr}`,
         status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
-        effective_status: rawItem.effective_status || rawItem.status,
-        deliveryInfo: resolveDeliveryStatus(rawItem, 'AD'),
+        effective_status: rawItem.effective_status || rawItem.status || 'PAUSED',
+        deliveryInfo: { code: 'ACTIVE' as const, label: 'Ativo', badgeColor: 'green' as const },
         format: 'IMAGE' as 'IMAGE' | 'VIDEO' | 'CAROUSEL',
         thumbnail_url: creative.thumbnail_url || creative.image_url || 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=300&auto=format&fit=crop&q=80',
         headline: creative.title || creative.body || 'Criativo Ativo no Meta Ads',
@@ -1296,7 +1303,7 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
 }
 
 // Strict Data Summary Calculator & Reconciliation Engine
-export function computeSummaryMetrics(campaigns: MetaCampaign[]): DashboardSummary {
+export function computeSummaryMetrics(campaigns: MetaCampaign[]): GerenciadorSummary {
   if (!campaigns || campaigns.length === 0) {
     return {
       investimentoTotal: null,

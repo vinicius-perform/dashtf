@@ -77,3 +77,89 @@ DO $$ BEGIN
     END IF;
 END $$;
 
+
+-- TABELA 4: INTEGRAÇÕES DOS USUÁRIOS (PERSISTÊNCIA DE TOKEN DA META API NO SUPABASE)
+CREATE TABLE IF NOT EXISTS user_integrations (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE,
+    meta_access_token TEXT,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Segurança de Nível de Linha (RLS)
+ALTER TABLE user_integrations ENABLE ROW LEVEL SECURITY;
+
+-- Políticas: O usuário só pode ler, inserir e editar o próprio token
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can view own integration' AND tablename = 'user_integrations') THEN
+        CREATE POLICY "Users can view own integration" ON user_integrations FOR SELECT USING (auth.uid() = user_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can insert own integration' AND tablename = 'user_integrations') THEN
+        CREATE POLICY "Users can insert own integration" ON user_integrations FOR INSERT WITH CHECK (auth.uid() = user_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can update own integration' AND tablename = 'user_integrations') THEN
+        CREATE POLICY "Users can update own integration" ON user_integrations FOR UPDATE USING (auth.uid() = user_id);
+    END IF;
+END $$;
+
+-- INJEÇÃO DO TOKEN ADMINISTRATIVO (SEED)
+INSERT INTO public.user_integrations (user_id, meta_access_token)
+SELECT id, 'EAAUCHCxqlm4BSXktFRiKzq7w1aa9ZC8iZApYGfhQNAdvWAdI48pJ7NWdN9xHHb9C38XuKd6qZBEN74fjlZBqRJE3vd7VPGtUXSMAAoLfVaT3R6DiehWmRuZCRcjefmDslZBfWOZB9uuMrHxWHqe99dMWsIn1zRVOLlAx8mJ6B2YUfoSsCfNL85EpZBZBMLWZBqrwZDZD'
+FROM auth.users 
+WHERE email = 'viniciusmarinhods@gmail.com'
+ON CONFLICT (user_id) 
+DO UPDATE SET meta_access_token = EXCLUDED.meta_access_token, updated_at = NOW();
+
+
+-- TABELA 5: INTEGRAÇÃO CRM (PLANILHA DE LEADS)
+CREATE TABLE IF NOT EXISTS crm_leads (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    data_hora TIMESTAMP WITH TIME ZONE,
+    nome VARCHAR(255),
+    telefone VARCHAR(50),
+    email VARCHAR(255) UNIQUE,
+    clinica VARCHAR(255),
+    especialidade VARCHAR(255),
+    objetivo_principal TEXT,
+    faturamento VARCHAR(100),
+    trafego_pago VARCHAR(100),
+    prazo_estimado VARCHAR(100),
+    score_pontos INTEGER DEFAULT 0,
+    tipo_lead VARCHAR(50),
+    campaign_id VARCHAR(255), -- ID vindo do Meta
+    adset_id VARCHAR(255),    -- ID vindo do Meta
+    ad_id VARCHAR(255),       -- ID vindo do Meta
+    sdr VARCHAR(100),
+    agendamento VARCHAR(20),  -- 'Sim', 'Não', etc.
+    venda VARCHAR(20),        -- 'Sim', 'Não', etc.
+    valor_conversao NUMERIC(10, 2) DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Constraint UNIQUE para garantir o funcionamento do ON CONFLICT (email) no Upsert
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'crm_leads_email_key') THEN
+        ALTER TABLE crm_leads ADD CONSTRAINT crm_leads_email_key UNIQUE (email);
+    END IF;
+END $$;
+
+-- Indexação para buscas rápidas no dashboard
+CREATE INDEX IF NOT EXISTS idx_crm_leads_campaign ON crm_leads(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_crm_leads_email ON crm_leads(email);
+CREATE INDEX IF NOT EXISTS idx_crm_leads_telefone ON crm_leads(telefone);
+
+-- Ativar Segurança (RLS)
+ALTER TABLE crm_leads ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Enable full access for authenticated users' AND tablename = 'crm_leads') THEN
+        CREATE POLICY "Enable full access for authenticated users" ON crm_leads FOR ALL USING (auth.role() = 'authenticated');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Enable read access for all on crm_leads' AND tablename = 'crm_leads') THEN
+        CREATE POLICY "Enable read access for all on crm_leads" ON crm_leads FOR SELECT USING (true);
+    END IF;
+END $$;
+
+
+

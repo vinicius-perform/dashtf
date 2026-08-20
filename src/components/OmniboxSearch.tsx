@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, X, Tag, Filter } from 'lucide-react';
-import { FilterTag } from '../services/meta/savedViewsStore';
+import { FilterTag } from '../types/meta';
 
 interface OmniboxSearchProps {
   activeFilters: FilterTag[];
