@@ -19,7 +19,7 @@ interface SidebarProps {
   onToggleCollapse?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ 
+export const Sidebar: React.FC<SidebarProps> = React.memo(({ 
   activeTab, 
   setActiveTab,
   activeLevel,
@@ -140,4 +140,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
     </aside>
   );
-};
+});
+
+Sidebar.displayName = 'Sidebar';

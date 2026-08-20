@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { CreativePerformance, CreativesSummaryMetrics } from '../types/creatives';
 import { CrmLead } from '../types/crm';
 import { fetchCrmLeads } from '../services/crmLeadsService';
 import { MetaAd, MetaCampaign, MetaAdSet } from '../types/meta';
-import { formatCurrency, formatNumber, formatPercent } from '../utils/formatters';
+import { formatCurrency, formatNumber, formatMultiplier } from '../utils/formatters';
 import { MetricCard } from './MetricCard';
 import { DateRangePicker, DateRange } from './DateRangePicker';
 import { getThisMonthRange, formatDateRangeLabel } from '../utils/timezone';
@@ -10,285 +11,404 @@ import {
   Layers, 
   Search, 
   RefreshCw, 
-  TrendingUp, 
-  DollarSign, 
-  Trophy, 
   AlertTriangle, 
-  CheckCircle2, 
-  XCircle,
-  Filter,
+  Sparkles, 
+  TrendingUp, 
+  Minus, 
+  Filter, 
   Image as ImageIcon,
-  Sparkles
+  ArrowUpDown,
+  Copy,
+  Check
 } from 'lucide-react';
-
-export interface CreativePerformance {
-  ad_id: string;
-  ad_name: string;
-  campaign_id: string;
-  campaign_name: string;
-  adset_id: string;
-  adset_name: string;
-  thumbnail_url?: string;
-  leadsCount: number;
-  agendamentosCount: number;
-  vendasCount: number;
-  investimento: number;
-  receitaGerada: number;
-  roas: number;
-  lucroLiquido: number;
-  veredicto: 'LUCRATIVO' | 'NEUTRO' | 'PREJUIZO';
-}
 
 interface CreativesViewProps {
   ads?: MetaAd[];
   campaigns?: MetaCampaign[];
   adsets?: MetaAdSet[];
   isLoading?: boolean;
+  dateRange?: DateRange;
+  setDateRange?: (range: DateRange) => void;
+  onRefresh?: () => void;
 }
 
-export const CreativesView: React.FC<CreativesViewProps> = ({ 
-  ads = [], 
-  campaigns = [], 
-  adsets = [], 
-  isLoading: parentLoading = false 
-}) => {
-  const [leads, setLeads] = useState<CrmLead[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [search, setSearch] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+interface CrmAdAggregation {
+  leads_generated: number;
+  agendamentos: number;
+  vendas: number;
+  revenue: number;
+  campaign_id?: string;
+  adset_id?: string;
+}
 
-  const [dateRange, setDateRange] = useState<DateRange>(() => {
-    const range = getThisMonthRange('America/Sao_Paulo');
-    range.label = formatDateRangeLabel(range.startDate, range.endDate, 'America/Sao_Paulo');
-    return range;
-  });
-
-  const loadData = async () => {
-    setLoading(true);
-    const crmData = await fetchCrmLeads();
-    setLeads(crmData);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  // 1. Filter raw CRM leads by date range and search text
-  const filteredCrmLeads = useMemo(() => {
-    return leads.filter((lead) => {
-      const searchLower = search.toLowerCase().trim();
-      const matchesSearch = 
-        !searchLower ||
-        (lead.nome || '').toLowerCase().includes(searchLower) ||
-        (lead.email || '').toLowerCase().includes(searchLower) ||
-        (lead.telefone || '').toLowerCase().includes(searchLower) ||
-        (lead.clinica || '').toLowerCase().includes(searchLower) ||
-        (lead.sdr || '').toLowerCase().includes(searchLower) ||
-        (lead.ad_id || '').toLowerCase().includes(searchLower) ||
-        (lead.campaign_id || '').toLowerCase().includes(searchLower);
-
-      let matchesDate = true;
-      if (dateRange.startDate && dateRange.endDate) {
-        const rawDate = lead.data_hora || lead.created_at;
-        if (rawDate) {
-          const leadTime = new Date(rawDate).getTime();
-          const startMs = new Date(`${dateRange.startDate}T00:00:00`).getTime();
-          const endMs = new Date(`${dateRange.endDate}T23:59:59.999`).getTime();
-          matchesDate = !isNaN(leadTime) && leadTime >= startMs && leadTime <= endMs;
-        }
-      }
-
-      return matchesSearch && matchesDate;
-    });
-  }, [leads, search, dateRange]);
-
-  // 2. Aggregate CRM leads and Meta Ads spend per Creative (ad_id)
-  const creativesPerformanceList: CreativePerformance[] = useMemo(() => {
-    // Map ad_id -> CRM metrics
-    const crmMap = new Map<string, {
-      leadsCount: number;
-      agendamentosCount: number;
-      vendasCount: number;
-      receitaGerada: number;
-      campaign_id?: string;
-      adset_id?: string;
-    }>();
-
-    filteredCrmLeads.forEach((lead) => {
-      const adIdKey = (lead.ad_id || 'unattributed').trim();
-      if (!crmMap.has(adIdKey)) {
-        crmMap.set(adIdKey, {
-          leadsCount: 0,
-          agendamentosCount: 0,
-          vendasCount: 0,
-          receitaGerada: 0,
-          campaign_id: lead.campaign_id,
-          adset_id: lead.adset_id
-        });
-      }
-      const item = crmMap.get(adIdKey)!;
-      item.leadsCount += 1;
-      if ((lead.agendamento || '').toLowerCase() === 'sim') item.agendamentosCount += 1;
-      if ((lead.venda || '').toLowerCase() === 'sim') item.vendasCount += 1;
-      item.receitaGerada += Number(lead.valor_conversao) || 0;
-      if (!item.campaign_id && lead.campaign_id) item.campaign_id = lead.campaign_id;
-      if (!item.adset_id && lead.adset_id) item.adset_id = lead.adset_id;
-    });
-
-    // Collect all unique ad_ids from both ads engine and CRM leads
-    const allAdIds = new Set<string>();
-    ads.forEach((ad) => allAdIds.add(ad.id));
-    crmMap.forEach((_, key) => {
-      if (key !== 'unattributed') allAdIds.add(key);
-    });
-
-    const result: CreativePerformance[] = [];
-
-    // Helper map for ads lookups
-    const adsMap = new Map<string, MetaAd>();
-    ads.forEach((ad) => adsMap.set(ad.id, ad));
-
-    allAdIds.forEach((adId) => {
-      const metaAd = adsMap.get(adId);
-      const crmData = crmMap.get(adId) || {
-        leadsCount: 0,
-        agendamentosCount: 0,
-        vendasCount: 0,
-        receitaGerada: 0
-      };
-
-      // Spend from Meta Ads engine
-      const investimento = metaAd?.spend || 0;
-      const receitaGerada = crmData.receitaGerada;
-      const lucroLiquido = receitaGerada - investimento;
-
-      let roas = 0;
-      if (investimento > 0) {
-        roas = receitaGerada / investimento;
-      } else if (receitaGerada > 0) {
-        roas = 999; // Infinite ROAS
-      }
-
-      // Determine verdict status
-      let veredicto: 'LUCRATIVO' | 'NEUTRO' | 'PREJUIZO' = 'NEUTRO';
-      if (receitaGerada > investimento && receitaGerada > 0) {
-        veredicto = 'LUCRATIVO';
-      } else if (investimento > 0 && receitaGerada < investimento) {
-        veredicto = 'PREJUIZO';
-      } else if (receitaGerada === investimento && receitaGerada > 0) {
-        veredicto = 'NEUTRO';
-      }
-
-      // Ad details fallback
-      const ad_name = metaAd?.name || `Anúncio ID ${adId}`;
-      const campaign_name = metaAd?.campaign_name || (crmData.campaign_id ? `Campanha ID ${crmData.campaign_id}` : '—');
-      const adset_name = metaAd?.adset_name || (crmData.adset_id ? `Conjunto ID ${crmData.adset_id}` : '—');
-      const campaign_id = metaAd?.campaign_id || crmData.campaign_id || '';
-      const adset_id = metaAd?.adset_id || crmData.adset_id || '';
-
-      result.push({
-        ad_id: adId,
-        ad_name,
-        campaign_id,
-        campaign_name,
-        adset_id,
-        adset_name,
-        thumbnail_url: metaAd?.thumbnail_url,
-        leadsCount: crmData.leadsCount,
-        agendamentosCount: crmData.agendamentosCount,
-        vendasCount: crmData.vendasCount,
-        investimento,
-        receitaGerada,
-        roas,
-        lucroLiquido,
-        veredicto
-      });
-    });
-
-    // Include unattributed CRM leads if any
-    if (crmMap.has('unattributed')) {
-      const crmData = crmMap.get('unattributed')!;
-      result.push({
-        ad_id: 'unattributed',
-        ad_name: 'Leads Sem Anúncio Mapeado',
-        campaign_id: '',
-        campaign_name: 'Origem Direta / Não Identificada',
-        adset_id: '',
-        adset_name: '—',
-        leadsCount: crmData.leadsCount,
-        agendamentosCount: crmData.agendamentosCount,
-        vendasCount: crmData.vendasCount,
-        investimento: 0,
-        receitaGerada: crmData.receitaGerada,
-        roas: 999,
-        lucroLiquido: crmData.receitaGerada,
-        veredicto: 'LUCRATIVO'
-      });
-    }
-
-    // Sort by Receita Gerada DESC
-    return result.sort((a, b) => b.receitaGerada - a.receitaGerada);
-  }, [filteredCrmLeads, ads]);
-
-  // 3. Filtered performance list based on Status dropdown & search text
-  const displayedCreatives = useMemo(() => {
-    return creativesPerformanceList.filter((item) => {
-      const matchesSearch = 
-        !search.trim() ||
-        item.ad_name.toLowerCase().includes(search.toLowerCase()) ||
-        item.campaign_name.toLowerCase().includes(search.toLowerCase()) ||
-        item.ad_id.toLowerCase().includes(search.toLowerCase());
-
-      const matchesStatus = 
-        statusFilter === 'ALL' ||
-        item.veredicto === statusFilter;
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [creativesPerformanceList, search, statusFilter]);
-
-  // 4. Operation Summary Metrics (KPI Cards)
-  const summaryMetrics = useMemo(() => {
-    const totalInvestido = creativesPerformanceList.reduce((acc, c) => acc + c.investimento, 0);
-    const totalFaturamento = creativesPerformanceList.reduce((acc, c) => acc + c.receitaGerada, 0);
-    const roasGlobal = totalInvestido > 0 ? totalFaturamento / totalInvestido : (totalFaturamento > 0 ? 999 : 0);
-
-    // Champion Creative (Highest Revenue)
-    const champion = creativesPerformanceList.length > 0 ? creativesPerformanceList[0] : null;
-
-    return {
-      totalInvestido,
-      totalFaturamento,
-      roasGlobal,
-      championName: champion ? champion.ad_name : 'Nenhum',
-      championReceita: champion ? champion.receitaGerada : 0
-    };
-  }, [creativesPerformanceList]);
-
-  const getVerdictBadge = (veredicto: 'LUCRATIVO' | 'NEUTRO' | 'PREJUIZO', roas: number) => {
-    if (veredicto === 'LUCRATIVO') {
+const renderStatusBadge = (status: 'LUCRATIVO' | 'EMPATE' | 'PREJUIZO' | 'ORGANICO') => {
+  switch (status) {
+    case 'LUCRATIVO':
       return (
         <span className="inline-flex items-center gap-1.5 bg-brand-neon text-black font-bold px-2.5 py-0.5 rounded-full text-xs shadow-md shadow-brand-neon/20">
           <Sparkles className="w-3.5 h-3.5 fill-black text-brand-neon" />
           <span>Lucrativo</span>
         </span>
       );
-    }
-    if (veredicto === 'PREJUIZO') {
+    case 'PREJUIZO':
       return (
         <span className="inline-flex items-center gap-1.5 bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-0.5 rounded-full text-xs font-bold">
           <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
-          <span>Prejuízo / Escalar c/ Cuidado</span>
+          <span>Prejuízo</span>
         </span>
       );
+    case 'ORGANICO':
+      return (
+        <span className="inline-flex items-center gap-1.5 bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2.5 py-0.5 rounded-full text-xs font-bold">
+          <TrendingUp className="w-3.5 h-3.5 text-blue-400" />
+          <span>Orgânico / Direto</span>
+        </span>
+      );
+    case 'EMPATE':
+    default:
+      return (
+        <span className="inline-flex items-center gap-1.5 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-2.5 py-0.5 rounded-full text-xs font-semibold">
+          <Minus className="w-3 h-3 text-yellow-400" />
+          <span>Empate</span>
+        </span>
+      );
+  }
+};
+
+export const CreativesView: React.FC<CreativesViewProps> = React.memo(({ 
+  ads = [], 
+  campaigns = [], 
+  adsets = [], 
+  isLoading: parentLoading = false,
+  dateRange: propDateRange,
+  setDateRange: propSetDateRange,
+  onRefresh
+}) => {
+  const [leads, setLeads] = useState<CrmLead[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [search, setSearch] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [copiedAdId, setCopiedAdId] = useState<string | null>(null);
+
+  const handleCopyId = useCallback((adId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!adId || adId === 'ORGANICO') return;
+    navigator.clipboard.writeText(adId);
+    setCopiedAdId(adId);
+    setTimeout(() => {
+      setCopiedAdId((prev) => (prev === adId ? null : prev));
+    }, 2000);
+  }, []);
+
+  const [localDateRange, setLocalDateRange] = useState<DateRange>(() => {
+    const range = getThisMonthRange('America/Sao_Paulo');
+    range.label = formatDateRangeLabel(range.startDate, range.endDate, 'America/Sao_Paulo');
+    return range;
+  });
+
+  const effectiveDateRange = propDateRange || localDateRange;
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const crmData = await fetchCrmLeads();
+      setLeads(crmData);
+    } catch (err) {
+      console.error('Erro ao carregar leads para a análise de criativos:', err);
+    } finally {
+      setLoading(false);
     }
-    return (
-      <span className="inline-flex items-center gap-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-2.5 py-0.5 rounded-full text-xs font-semibold">
-        <span>Empatado / Neutro</span>
-      </span>
-    );
-  };
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleManualRefresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const crmPromise = fetchCrmLeads().then(setLeads);
+      const parentPromise = onRefresh ? onRefresh() : Promise.resolve();
+      await Promise.all([crmPromise, parentPromise]);
+    } catch (err) {
+      console.error('Erro ao recarregar dados de atribuição:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [onRefresh]);
+
+  const handleDateRangeChange = useCallback((range: DateRange) => {
+    if (propSetDateRange) {
+      propSetDateRange(range);
+    } else {
+      setLocalDateRange(range);
+    }
+  }, [propSetDateRange]);
+
+  // 1. Filtrar leads do CRM por período e texto em tempo linear O(N)
+  const filteredCrmLeads = useMemo(() => {
+    const searchLower = search.toLowerCase().trim();
+    const hasSearch = searchLower.length > 0;
+    
+    let startMs = 0;
+    let endMs = Infinity;
+    const hasDateRange = Boolean(effectiveDateRange.startDate && effectiveDateRange.endDate);
+    
+    if (hasDateRange) {
+      startMs = new Date(`${effectiveDateRange.startDate}T00:00:00`).getTime();
+      endMs = new Date(`${effectiveDateRange.endDate}T23:59:59.999`).getTime();
+    }
+
+    return leads.filter((lead) => {
+      if (hasSearch) {
+        const matchesSearch = 
+          (lead.nome || '').toLowerCase().includes(searchLower) ||
+          (lead.email || '').toLowerCase().includes(searchLower) ||
+          (lead.telefone || '').toLowerCase().includes(searchLower) ||
+          (lead.clinica || '').toLowerCase().includes(searchLower) ||
+          (lead.sdr || '').toLowerCase().includes(searchLower) ||
+          (lead.ad_id || '').toLowerCase().includes(searchLower) ||
+          (lead.campaign_id || '').toLowerCase().includes(searchLower);
+
+        if (!matchesSearch) return false;
+      }
+
+      if (hasDateRange) {
+        const rawDate = lead.data_hora || lead.created_at;
+        if (rawDate) {
+          const leadTime = new Date(rawDate).getTime();
+          if (isNaN(leadTime) || leadTime < startMs || leadTime > endMs) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    });
+  }, [leads, search, effectiveDateRange.startDate, effectiveDateRange.endDate]);
+
+  // 2. Algoritmo de Cruzamento de Dados O(N) com Hash Maps
+  const creativesPerformanceList: CreativePerformance[] = useMemo(() => {
+    // Passo 1 (Dicionário CRM): Hash Map O(N_leads)
+    const crmMap = new Map<string, CrmAdAggregation>();
+
+    for (let i = 0; i < filteredCrmLeads.length; i++) {
+      const lead = filteredCrmLeads[i];
+      const rawAdId = lead.ad_id ? String(lead.ad_id).trim() : '';
+      const adIdKey = rawAdId.length > 0 ? rawAdId : 'ORGANICO';
+
+      let agg = crmMap.get(adIdKey);
+      if (!agg) {
+        agg = {
+          leads_generated: 0,
+          agendamentos: 0,
+          vendas: 0,
+          revenue: 0,
+          campaign_id: lead.campaign_id ? String(lead.campaign_id) : undefined,
+          adset_id: lead.adset_id ? String(lead.adset_id) : undefined
+        };
+        crmMap.set(adIdKey, agg);
+      }
+
+      agg.leads_generated += 1;
+      if ((lead.agendamento || '').trim().toLowerCase() === 'sim') {
+        agg.agendamentos += 1;
+      }
+      if ((lead.venda || '').trim().toLowerCase() === 'sim') {
+        agg.vendas += 1;
+      }
+
+      const valor = Number(lead.valor_conversao);
+      if (!isNaN(valor) && valor > 0) {
+        agg.revenue += valor;
+      }
+
+      if (!agg.campaign_id && lead.campaign_id) {
+        agg.campaign_id = String(lead.campaign_id);
+      }
+      if (!agg.adset_id && lead.adset_id) {
+        agg.adset_id = String(lead.adset_id);
+      }
+    }
+
+    // Passo 2 (Mesclagem com Meta Ads): O(N_ads)
+    const result: CreativePerformance[] = [];
+    const visitedAdIds = new Set<string>();
+
+    for (let j = 0; j < ads.length; j++) {
+      const ad = ads[j];
+      const adIdStr = String(ad.id).trim();
+      visitedAdIds.add(adIdStr);
+
+      const crmMetrics = crmMap.get(adIdStr) || {
+        leads_generated: 0,
+        agendamentos: 0,
+        vendas: 0,
+        revenue: 0
+      };
+
+      const spend = typeof ad.spend === 'number' ? ad.spend : (parseFloat(String(ad.spend || '0')) || 0);
+      const revenue = crmMetrics.revenue;
+      const lucro = revenue - spend;
+
+      let roas = 0;
+      if (spend > 0) {
+        roas = revenue / spend;
+      } else if (revenue > 0) {
+        roas = 999; // Infinite ROAS (Receita com custo zero no período)
+      }
+
+      // Passo 3 (Matemática e Veredicto)
+      let status: 'LUCRATIVO' | 'EMPATE' | 'PREJUIZO' | 'ORGANICO' = 'EMPATE';
+      if (spend > 0 && revenue > spend) {
+        status = 'LUCRATIVO';
+      } else if (spend > 0 && revenue < spend) {
+        status = 'PREJUIZO';
+      } else if (spend > 0 && revenue === spend) {
+        status = 'EMPATE';
+      } else if (spend === 0 && revenue > 0) {
+        status = 'ORGANICO';
+      } else {
+        status = 'EMPATE';
+      }
+
+      result.push({
+        ad_id: adIdStr,
+        ad_name: ad.name || `Anúncio ID ${adIdStr}`,
+        campaign_id: ad.campaign_id || crmMetrics.campaign_id || '',
+        campaign_name: ad.campaign_name || 'Campanha Meta',
+        adset_id: ad.adset_id || crmMetrics.adset_id || '',
+        adset_name: ad.adset_name || 'Conjunto de Anúncios',
+        spend,
+        leads_generated: crmMetrics.leads_generated,
+        agendamentos: crmMetrics.agendamentos,
+        vendas: crmMetrics.vendas,
+        revenue,
+        roas,
+        lucro,
+        status,
+        thumbnail_url: ad.thumbnail_url
+      });
+    }
+
+    // Passo 4 (Criativos do CRM não listados na Meta e Bucket Orgânico)
+    crmMap.forEach((crmMetrics, key) => {
+      if (!visitedAdIds.has(key)) {
+        if (key === 'ORGANICO') {
+          result.push({
+            ad_id: 'ORGANICO',
+            ad_name: 'Orgânico / Direto / Não Rastreado',
+            campaign_id: '',
+            campaign_name: 'Origem Direta / Não Identificada',
+            adset_id: '',
+            adset_name: '—',
+            spend: 0,
+            leads_generated: crmMetrics.leads_generated,
+            agendamentos: crmMetrics.agendamentos,
+            vendas: crmMetrics.vendas,
+            revenue: crmMetrics.revenue,
+            roas: 999,
+            lucro: crmMetrics.revenue,
+            status: 'ORGANICO'
+          });
+        } else {
+          const revenue = crmMetrics.revenue;
+          result.push({
+            ad_id: key,
+            ad_name: `Anúncio CRM ID ${key}`,
+            campaign_id: crmMetrics.campaign_id || '',
+            campaign_name: crmMetrics.campaign_id ? `Campanha ID ${crmMetrics.campaign_id}` : 'Campanha Meta (Histórica)',
+            adset_id: crmMetrics.adset_id || '',
+            adset_name: crmMetrics.adset_id ? `Conjunto ID ${crmMetrics.adset_id}` : '—',
+            spend: 0,
+            leads_generated: crmMetrics.leads_generated,
+            agendamentos: crmMetrics.agendamentos,
+            vendas: crmMetrics.vendas,
+            revenue,
+            roas: 999,
+            lucro: revenue,
+            status: revenue > 0 ? 'LUCRATIVO' : 'EMPATE'
+          });
+        }
+      }
+    });
+
+    // Ordenação padrão: Maior Lucro Descendente
+    return result.sort((a, b) => b.lucro - a.lucro);
+  }, [filteredCrmLeads, ads]);
+
+  // 3. Filtrar lista por Status e Busca
+  const displayedCreatives = useMemo(() => {
+    const searchLower = search.toLowerCase().trim();
+    return creativesPerformanceList.filter((item) => {
+      const matchesSearch = 
+        !searchLower ||
+        item.ad_name.toLowerCase().includes(searchLower) ||
+        item.campaign_name.toLowerCase().includes(searchLower) ||
+        item.ad_id.toLowerCase().includes(searchLower);
+
+      const matchesStatus = 
+        statusFilter === 'ALL' ||
+        item.status === statusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [creativesPerformanceList, search, statusFilter]);
+
+  // 4. Métricas Globais dos KPIs em passada única O(N)
+  const summaryMetrics: CreativesSummaryMetrics = useMemo(() => {
+    let totalSpend = 0;
+    let totalRevenue = 0;
+    let totalLeads = 0;
+    let totalVendas = 0;
+    
+    let champion: CreativePerformance | null = null;
+    let maxChampionScore = -Infinity;
+
+    for (let i = 0; i < creativesPerformanceList.length; i++) {
+      const c = creativesPerformanceList[i];
+      totalSpend += c.spend;
+      totalRevenue += c.revenue;
+      totalLeads += c.leads_generated;
+      totalVendas += c.vendas;
+
+      // Criativo Campeão: Maior volume de lucro e vendas
+      const score = c.lucro + (c.vendas * 1000);
+      if (c.ad_id !== 'ORGANICO' && score > maxChampionScore) {
+        maxChampionScore = score;
+        champion = c;
+      }
+    }
+
+    const lucroLiquido = totalRevenue - totalSpend;
+    const roasMedio = totalSpend > 0 
+      ? totalRevenue / totalSpend 
+      : (totalRevenue > 0 ? 999 : 0);
+
+    return {
+      totalSpend,
+      totalRevenue,
+      lucroLiquido,
+      roasMedio,
+      totalLeads,
+      totalVendas,
+      championCreative: champion ? {
+        name: champion.ad_name,
+        ad_id: champion.ad_id,
+        lucro: champion.lucro,
+        revenue: champion.revenue,
+        vendas: champion.vendas
+      } : null
+    };
+  }, [creativesPerformanceList]);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearch(e.target.value);
+  }, []);
+
+  const handleStatusFilterChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setStatusFilter(e.target.value);
+  }, []);
 
   return (
     <div className="p-6 space-y-6 max-w-[1700px] mx-auto animate-fadeIn">
@@ -307,55 +427,55 @@ export const CreativesView: React.FC<CreativesViewProps> = ({
         </div>
 
         <button
-          onClick={loadData}
+          onClick={handleManualRefresh}
           disabled={loading || parentLoading}
-          className="inline-flex items-center gap-2 bg-brand-sidebar hover:bg-zinc-800 text-white font-semibold text-xs px-3.5 py-2 rounded-xl border border-brand-border shadow-md transition-all disabled:opacity-50"
+          className="inline-flex items-center gap-2 bg-brand-sidebar hover:bg-zinc-800 text-white font-semibold text-xs px-3.5 py-2 rounded-xl border border-brand-border shadow-md transition-all disabled:opacity-50 cursor-pointer"
         >
-          <RefreshCw className={`w-4 h-4 text-brand-neon ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 text-brand-neon ${loading || parentLoading ? 'animate-spin' : ''}`} />
           <span>Atualizar Atribuição</span>
         </button>
       </div>
 
-      {/* Operation KPI Cards Grid */}
+      {/* Operation KPI Cards Grid (4 Colunas) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
-          title="Total Investido em Anúncios"
-          mainValue={formatCurrency(summaryMetrics.totalInvestido)}
-          extraInfoLabel="Mídia Meta Ads"
+          title="Investimento Total"
+          mainValue={formatCurrency(summaryMetrics.totalSpend)}
+          extraInfoLabel="Custo Meta Ads"
           extraInfoValue="Período Selecionado"
           showDollarIcon={true}
           isLoading={loading || parentLoading}
         />
 
         <MetricCard
-          title="Faturamento Atribuído a Criativos"
-          mainValue={formatCurrency(summaryMetrics.totalFaturamento)}
-          extraInfoLabel="Contratos CRM"
-          extraInfoValue="Vendas Atribuídas"
+          title="Receita Total (CRM)"
+          mainValue={formatCurrency(summaryMetrics.totalRevenue)}
+          extraInfoLabel="Vendas Contratadas"
+          extraInfoValue={`${formatNumber(summaryMetrics.totalVendas)} vendas registradas`}
           showDollarIcon={true}
           isLoading={loading || parentLoading}
         />
 
         <MetricCard
-          title="ROAS Global de Criativos"
-          mainValue={summaryMetrics.roasGlobal === 999 ? '∞' : `${summaryMetrics.roasGlobal.toFixed(2)}x`}
-          extraInfoLabel="Retorno s/ Investimento"
-          extraInfoValue={summaryMetrics.totalFaturamento >= summaryMetrics.totalInvestido ? 'Operação Lucrativa' : 'Abaixo do Breakeven'}
+          title="Lucro Líquido"
+          mainValue={formatCurrency(summaryMetrics.lucroLiquido)}
+          extraInfoLabel="ROAS Geral"
+          extraInfoValue={summaryMetrics.roasMedio === 999 ? '∞' : formatMultiplier(summaryMetrics.roasMedio)}
           showDollarIcon={false}
           isLoading={loading || parentLoading}
         />
 
         <MetricCard
-          title="Criativo Campeão (Mais Lucrativo)"
-          mainValue={formatCurrency(summaryMetrics.championReceita)}
-          extraInfoLabel="Campeão"
-          extraInfoValue={summaryMetrics.championName}
+          title="Criativo Campeão"
+          mainValue={summaryMetrics.championCreative ? formatCurrency(summaryMetrics.championCreative.lucro) : '—'}
+          extraInfoLabel="Maior Lucratividade"
+          extraInfoValue={summaryMetrics.championCreative ? summaryMetrics.championCreative.name : 'Nenhum'}
           showDollarIcon={false}
           isLoading={loading || parentLoading}
         />
       </div>
 
-      {/* Controls: Search Bar, Date Range Picker & Verdict Filter */}
+      {/* Controls: Omnibox Search Bar, Date Range Picker & Status Filter */}
       <div className="bg-brand-card p-4 rounded-2xl border border-brand-border shadow-lg flex flex-wrap items-center justify-between gap-4">
         {/* Search Bar Input */}
         <div className="relative flex-1 min-w-[280px]">
@@ -363,7 +483,7 @@ export const CreativesView: React.FC<CreativesViewProps> = ({
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={handleSearchChange}
             placeholder="Buscar por nome do anúncio, campanha ou ID do criativo..."
             className="w-full bg-brand-sidebar border border-brand-border rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-brand-neon transition-colors"
           />
@@ -372,22 +492,23 @@ export const CreativesView: React.FC<CreativesViewProps> = ({
         {/* Date Range Picker & Status Filter */}
         <div className="flex flex-wrap items-center gap-3">
           <DateRangePicker
-            value={dateRange}
-            onChange={setDateRange}
+            value={effectiveDateRange}
+            onChange={handleDateRangeChange}
           />
 
           <div className="flex items-center gap-1.5 bg-brand-sidebar px-3 py-1.5 rounded-xl border border-brand-border text-xs">
             <Filter className="w-3.5 h-3.5 text-zinc-400" />
-            <span className="text-zinc-400 font-medium">Veredito:</span>
+            <span className="text-zinc-400 font-medium">Status:</span>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={handleStatusFilterChange}
               className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer"
             >
               <option value="ALL" className="bg-zinc-900 text-white">Todos</option>
               <option value="LUCRATIVO" className="bg-zinc-900 text-white">Lucrativos</option>
-              <option value="NEUTRO" className="bg-zinc-900 text-white">Empatados / Neutros</option>
               <option value="PREJUIZO" className="bg-zinc-900 text-white">Prejuízo</option>
+              <option value="EMPATE" className="bg-zinc-900 text-white">Empate</option>
+              <option value="ORGANICO" className="bg-zinc-900 text-white">Orgânico / Direto</option>
             </select>
           </div>
         </div>
@@ -405,7 +526,7 @@ export const CreativesView: React.FC<CreativesViewProps> = ({
                 Ranking de Criativos ({displayedCreatives.length})
               </h3>
               <p className="text-xs text-brand-textMuted">
-                Cruzamento de custo de mídia Meta Ads com receita real de contrato no CRM
+                Cruzamento de custo de mídia Meta Ads com receita real de contrato no CRM (Ordenado por Lucro)
               </p>
             </div>
           </div>
@@ -426,15 +547,15 @@ export const CreativesView: React.FC<CreativesViewProps> = ({
                 </th>
                 {/* Col 3: Leads Gerados */}
                 <th className="py-3.5 px-4 text-center min-w-[120px]">
-                  Leads
+                  Leads (CRM)
                 </th>
                 {/* Col 4: Agendamentos */}
                 <th className="py-3.5 px-4 text-center min-w-[130px]">
                   Agendamentos
                 </th>
-                {/* Col 5: Vendas Concluídas */}
-                <th className="py-3.5 px-4 text-center min-w-[130px]">
-                  Vendas Concluídas
+                {/* Col 5: Vendas */}
+                <th className="py-3.5 px-4 text-center min-w-[120px]">
+                  Vendas
                 </th>
                 {/* Col 6: Investimento (R$) */}
                 <th className="py-3.5 px-4 text-right min-w-[150px]">
@@ -442,15 +563,22 @@ export const CreativesView: React.FC<CreativesViewProps> = ({
                 </th>
                 {/* Col 7: Receita Gerada (R$) */}
                 <th className="py-3.5 px-4 text-right min-w-[160px]">
-                  Receita Gerada (R$)
+                  Receita (R$)
                 </th>
-                {/* Col 8: ROAS do Criativo */}
-                <th className="py-3.5 px-4 text-center min-w-[130px]">
-                  ROAS Criativo
+                {/* Col 8: ROAS */}
+                <th className="py-3.5 px-4 text-center min-w-[120px]">
+                  ROAS
                 </th>
-                {/* Col 9: Status / Veredito */}
-                <th className="py-3.5 px-4 text-center min-w-[180px]">
-                  Status / Veredito
+                {/* Col 9: Lucro Líquido (R$) */}
+                <th className="py-3.5 px-4 text-right min-w-[160px]">
+                  <div className="flex items-center justify-end gap-1 text-white">
+                    <span>Lucro Líquido</span>
+                    <ArrowUpDown className="w-3 h-3 text-brand-neon" />
+                  </div>
+                </th>
+                {/* Col 10: Status / Veredicto */}
+                <th className="py-3.5 px-4 text-center min-w-[160px]">
+                  Status / Veredicto
                 </th>
               </tr>
             </thead>
@@ -467,12 +595,13 @@ export const CreativesView: React.FC<CreativesViewProps> = ({
                     <td className="p-4 text-right"><div className="h-4 w-20 rounded skeleton-shimmer ml-auto" /></td>
                     <td className="p-4 text-right"><div className="h-4 w-24 rounded skeleton-shimmer ml-auto" /></td>
                     <td className="p-4 text-center"><div className="h-4 w-16 rounded skeleton-shimmer mx-auto" /></td>
+                    <td className="p-4 text-right"><div className="h-4 w-24 rounded skeleton-shimmer ml-auto" /></td>
                     <td className="p-4 text-center"><div className="h-6 w-28 rounded skeleton-shimmer mx-auto" /></td>
                   </tr>
                 ))
               ) : displayedCreatives.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-12 text-center text-zinc-500">
+                  <td colSpan={10} className="p-12 text-center text-zinc-500">
                     Nenhum criativo encontrado com os filtros selecionados.
                   </td>
                 </tr>
@@ -500,9 +629,28 @@ export const CreativesView: React.FC<CreativesViewProps> = ({
                           <div className="truncate font-bold text-white max-w-[190px]" title={item.ad_name}>
                             {item.ad_name}
                           </div>
-                          <div className="font-mono text-[10px] text-zinc-400">
-                            ID: {item.ad_id}
-                          </div>
+                          {item.ad_id === 'ORGANICO' ? (
+                            <div className="font-mono text-[10px] text-zinc-500">
+                              Origem Direta
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => handleCopyId(item.ad_id, e)}
+                              title="Clique para copiar o ID"
+                              className="group/copy flex items-center gap-1.5 font-mono text-[10px] text-zinc-400 hover:text-green-400 transition-colors duration-200 cursor-pointer text-left select-none"
+                            >
+                              <span>ID: {item.ad_id}</span>
+                              {copiedAdId === item.ad_id ? (
+                                <span className="inline-flex items-center gap-0.5 text-brand-neon font-sans text-[10px] font-bold animate-in fade-in">
+                                  <Check className="w-3 h-3 text-brand-neon" />
+                                  <span>Copiado!</span>
+                                </span>
+                              ) : (
+                                <Copy className="w-3 h-3 opacity-0 group-hover/copy:opacity-100 transition-opacity duration-200 text-zinc-400 group-hover/copy:text-green-400" />
+                              )}
+                            </button>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -519,37 +667,42 @@ export const CreativesView: React.FC<CreativesViewProps> = ({
 
                     {/* 3. Leads Gerados */}
                     <td className="py-3.5 px-4 text-center font-bold text-white">
-                      {formatNumber(item.leadsCount)}
+                      {formatNumber(item.leads_generated)}
                     </td>
 
                     {/* 4. Agendamentos */}
                     <td className="py-3.5 px-4 text-center font-semibold text-zinc-200">
-                      {formatNumber(item.agendamentosCount)}
+                      {formatNumber(item.agendamentos)}
                     </td>
 
-                    {/* 5. Vendas Concluídas */}
+                    {/* 5. Vendas */}
                     <td className="py-3.5 px-4 text-center font-bold text-emerald-400">
-                      {formatNumber(item.vendasCount)}
+                      {formatNumber(item.vendas)}
                     </td>
 
                     {/* 6. Investimento (R$) */}
                     <td className="py-3.5 px-4 text-right text-zinc-300 font-semibold">
-                      {formatCurrency(item.investimento)}
+                      {formatCurrency(item.spend)}
                     </td>
 
                     {/* 7. Receita Gerada (R$) */}
-                    <td className="py-3.5 px-4 text-right font-bold text-emerald-400 text-sm">
-                      {formatCurrency(item.receitaGerada)}
+                    <td className="py-3.5 px-4 text-right font-bold text-emerald-400">
+                      {formatCurrency(item.revenue)}
                     </td>
 
-                    {/* 8. ROAS do Criativo */}
+                    {/* 8. ROAS */}
                     <td className="py-3.5 px-4 text-center font-extrabold text-white text-xs">
-                      {item.roas === 999 ? '∞' : `${item.roas.toFixed(2)}x`}
+                      {item.roas === 999 ? '∞' : (item.spend === 0 && item.revenue === 0 ? '—' : formatMultiplier(item.roas))}
                     </td>
 
-                    {/* 9. Status / Veredito */}
+                    {/* 9. Lucro Líquido (R$) */}
+                    <td className={`py-3.5 px-4 text-right font-black text-sm ${item.lucro >= 0 ? 'text-brand-neon' : 'text-rose-400'}`}>
+                      {formatCurrency(item.lucro)}
+                    </td>
+
+                    {/* 10. Status / Veredicto */}
                     <td className="py-3.5 px-4 text-center">
-                      {getVerdictBadge(item.veredicto, item.roas)}
+                      {renderStatusBadge(item.status)}
                     </td>
                   </tr>
                 ))
@@ -560,4 +713,6 @@ export const CreativesView: React.FC<CreativesViewProps> = ({
       </div>
     </div>
   );
-};
+});
+
+CreativesView.displayName = 'CreativesView';

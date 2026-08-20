@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { GerenciadorView } from './components/GerenciadorView';
@@ -67,6 +67,7 @@ export function App() {
   const [lastUpdatedTime, setLastUpdatedTime] = useState<string>(new Date().toLocaleString('pt-BR'));
 
   // 1. Check Supabase Auth Session Persistence on App Mount (Prevents F5 flash)
+  // 1. Check Supabase Auth Session Persistence on App Mount (Prevents F5 flash)
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
       setSession(initialSession);
@@ -89,21 +90,28 @@ export function App() {
     const userId = session.user.id;
     const userEmail = session.user.email;
 
-    fetchUserMetaToken(userId, userEmail).then((dbToken) => {
-      if (!isMounted) return;
-      if (dbToken) {
-        setMetaConfig((prev) => ({
-          ...prev,
-          accessToken: dbToken,
-          isConnected: true
-        }));
-      }
-    });
+    fetchUserMetaToken(userId, userEmail)
+      .then((dbToken) => {
+        if (!isMounted || !dbToken) return;
+        setMetaConfig((prev) => {
+          if (prev.accessToken === dbToken && prev.isConnected) {
+            return prev; // Preserve identity to avoid downstream re-renders
+          }
+          return {
+            ...prev,
+            accessToken: dbToken,
+            isConnected: true
+          };
+        });
+      })
+      .catch((err) => {
+        console.error('Falha ao sincronizar token da Meta:', err);
+      });
 
     return () => {
       isMounted = false;
     };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, session?.user?.email]);
 
   // Trigger 60-day retention purger on app mount
   useEffect(() => {
@@ -126,20 +134,21 @@ export function App() {
     return () => clearInterval(interval);
   }, [accountTimezone]);
 
-  const handleSelectAccount = (accId: string) => {
+  const handleSelectAccount = useCallback((accId: string) => {
     const accObj = accounts.find(a => a.id === accId);
-    const updatedConfig: MetaConfig = {
-      ...metaConfig,
-      selectedAccountId: accId,
-      accountName: accObj ? accObj.name : metaConfig.accountName
-    };
-
+    setMetaConfig((prev) => {
+      const updatedConfig: MetaConfig = {
+        ...prev,
+        selectedAccountId: accId,
+        accountName: accObj ? accObj.name : prev.accountName
+      };
+      saveMetaConfig(updatedConfig);
+      return updatedConfig;
+    });
     setSelectedAccountId(accId);
-    setMetaConfig(updatedConfig);
-    saveMetaConfig(updatedConfig);
-  };
+  }, [accounts]);
 
-  const loadAllData = async () => {
+  const loadAllData = useCallback(async () => {
     setIsLoading(true);
     try {
       const currentConfig: MetaConfig = {
@@ -162,7 +171,7 @@ export function App() {
 
       const baseSummary = computeSummaryMetrics(campData);
 
-      // Requirement 4: Strictly map account level KPI insights
+      // Strictly map account level KPI insights
       if (accInsights) {
         if (accInsights.spend !== undefined && accInsights.spend !== null) {
           baseSummary.investimentoTotal = parseFloat(accInsights.spend);
@@ -204,21 +213,19 @@ export function App() {
       }
 
       setSummary(baseSummary);
-
-      // Requirement 2: Reactive update of last updated timestamp on API promise resolution
       setLastUpdatedTime(new Date().toLocaleString('pt-BR'));
     } catch (e) {
       console.error('Error in Meta Data Integrity Engine:', e);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [metaConfig, selectedAccountId, dateRange]);
 
   useEffect(() => {
     loadAllData();
-  }, [selectedAccountId, metaConfig.accessToken, dateRange]);
+  }, [loadAllData]);
 
-  const handleToggleCampaignStatus = (campaignId: string) => {
+  const handleToggleCampaignStatus = useCallback((campaignId: string) => {
     setCampaigns((prev) =>
       prev.map((c) =>
         c.id === campaignId
@@ -226,12 +233,20 @@ export function App() {
           : c
       )
     );
-  };
+  }, []);
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     await supabase.auth.signOut();
     setSession(null);
-  };
+  }, []);
+
+  const handleToggleSidebarCollapse = useCallback(() => {
+    setIsSidebarCollapsed((prev) => !prev);
+  }, []);
+
+  const handleTabChange = useCallback((tab: string) => {
+    setActiveTab(tab as any);
+  }, []);
 
   // 2. Initial Auth Session Checking Splash Guard
   if (isAuthChecking) {
@@ -266,12 +281,12 @@ export function App() {
       {/* Sidebar Navigation */}
       <Sidebar
         activeTab={activeTab}
-        setActiveTab={(tab) => setActiveTab(tab as any)}
+        setActiveTab={handleTabChange}
         activeLevel={activeLevel}
         setActiveLevel={setActiveLevel}
         onLogout={handleLogout}
         isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        onToggleCollapse={handleToggleSidebarCollapse}
       />
 
       {/* Main Content Area */}
@@ -318,6 +333,9 @@ export function App() {
               campaigns={campaigns}
               adsets={adsets}
               isLoading={isLoading}
+              dateRange={dateRange}
+              setDateRange={setDateRange}
+              onRefresh={loadAllData}
             />
           )}
 

@@ -1,11 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { 
   getTodayRange, 
   getYesterdayRange, 
   getLast7DaysRange, 
-  getLast30DaysRange,
   getThisMonthRange, 
   getLastMonthRange,
   formatDateRangeLabel
@@ -22,6 +21,14 @@ interface DateRangePickerProps {
   onChange: (range: DateRange) => void;
   timezone?: string;
 }
+
+const PRESET_TABS = [
+  { id: 'hoje', label: 'Hoje', getRange: getTodayRange },
+  { id: 'ontem', label: 'Ontem', getRange: getYesterdayRange },
+  { id: '7d', label: 'Últimos 7 dias', getRange: getLast7DaysRange },
+  { id: 'este_mes', label: 'Este mês', getRange: getThisMonthRange },
+  { id: 'mes_anterior', label: 'Mês anterior', getRange: getLastMonthRange },
+];
 
 const MONTH_NAMES = [
   'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
@@ -66,24 +73,24 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChang
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handlePresetSelect = (type: string) => {
-    let range: DateRange;
-    if (type === 'hoje') {
-      range = getTodayRange(timezone);
-    } else if (type === 'ontem') {
-      range = getYesterdayRange(timezone);
-    } else if (type === '7d') {
-      range = getLast7DaysRange(timezone);
-    } else if (type === '30d') {
-      range = getLast30DaysRange(timezone);
-    } else if (type === 'este_mes') {
-      range = getThisMonthRange(timezone);
-    } else if (type === 'mes_anterior') {
-      range = getLastMonthRange(timezone);
-    } else {
-      range = getTodayRange(timezone);
-    }
+  // Determina o preset ativo comparando as datas atuais com os intervalos pré-definidos
+  const activePreset = useMemo(() => {
+    if (!value.startDate || !value.endDate || tempStart) return null;
 
+    for (const preset of PRESET_TABS) {
+      const pRange = preset.getRange(timezone);
+      if (pRange.startDate === value.startDate && pRange.endDate === value.endDate) {
+        return preset.id;
+      }
+    }
+    return null;
+  }, [value.startDate, value.endDate, timezone, tempStart]);
+
+  const handlePresetSelect = (presetId: string) => {
+    const preset = PRESET_TABS.find(p => p.id === presetId);
+    if (!preset) return;
+
+    const range = preset.getRange(timezone);
     range.label = formatDateRangeLabel(range.startDate, range.endDate, timezone);
     setTempStart(null);
 
@@ -227,36 +234,23 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChang
         <div className="absolute right-0 top-full mt-2 bg-[#121214] border border-brand-border rounded-2xl shadow-2xl z-50 p-5 w-[540px] max-w-[90vw] space-y-4 animate-in fade-in zoom-in-95 duration-150">
           {/* Top Horizontal Preset Tabs */}
           <div className="flex items-center gap-6 text-xs font-semibold text-zinc-400 border-b border-brand-border/60 pb-3 px-1 overflow-x-auto">
-            <button
-              onClick={() => handlePresetSelect('hoje')}
-              className="hover:text-brand-neon transition-colors shrink-0"
-            >
-              Hoje
-            </button>
-            <button
-              onClick={() => handlePresetSelect('ontem')}
-              className="hover:text-brand-neon transition-colors shrink-0"
-            >
-              Ontem
-            </button>
-            <button
-              onClick={() => handlePresetSelect('7d')}
-              className="hover:text-brand-neon transition-colors shrink-0"
-            >
-              Últimos 7 dias
-            </button>
-            <button
-              onClick={() => handlePresetSelect('este_mes')}
-              className="text-white font-bold underline decoration-brand-neon decoration-2 underline-offset-4 shrink-0"
-            >
-              Este mês
-            </button>
-            <button
-              onClick={() => handlePresetSelect('mes_anterior')}
-              className="hover:text-brand-neon transition-colors shrink-0"
-            >
-              Mês anterior
-            </button>
+            {PRESET_TABS.map((preset) => {
+              const isActive = activePreset === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => handlePresetSelect(preset.id)}
+                  className={`transition-all shrink-0 pb-1 relative cursor-pointer ${
+                    isActive
+                      ? 'text-white font-bold after:content-[""] after:absolute after:left-0 after:right-0 after:-bottom-[13px] after:h-[2.5px] after:bg-brand-neon'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Navigation Controls & Dual Month Grid */}

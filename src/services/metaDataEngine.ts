@@ -1144,13 +1144,20 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
 
     const adsetMap = new Map<string, string>();
     if (adsets && Array.isArray(adsets)) {
-      adsets.forEach(as => adsetMap.set(String(as.id), as.name));
+      adsets.forEach(as => {
+        if (as.id !== undefined && as.id !== null) {
+          adsetMap.set(String(as.id), as.name || `Conjunto ${as.id}`);
+        }
+      });
     }
 
     // 3. LEFT JOIN: Merge Master List with Period Insights
     const result = rawAds.map((rawItem: any) => {
+      const adIdStr = String(rawItem.id || '');
+      const adsetIdStr = String(rawItem.adset_id || rawItem.adset?.id || '');
+      const campaignIdStr = String(rawItem.campaign_id || rawItem.campaign?.id || '');
+
       try {
-        const adIdStr = String(rawItem.id);
         const periodInsight = adInsightsMap.get(adIdStr);
         const itemWithInsight = {
           ...rawItem,
@@ -1161,9 +1168,6 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
         const deliveryInfo = resolveDeliveryStatus(rawItem, 'AD');
         const creative = rawItem.creative || {};
         const fetchedAt = new Date().toISOString();
-
-        const adsetIdStr = String(rawItem.adset_id || rawItem.adset?.id || '');
-        const campaignIdStr = String(rawItem.campaign_id || rawItem.campaign?.id || '');
 
         const lineage: DataLineage = {
           source: 'META_MARKETING_API',
@@ -1215,16 +1219,13 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
       } catch (itemErr) {
         console.warn('Failed to parse individual ad item, returning safe default:', itemErr);
         const creative = rawItem.creative || {};
-        const adIdStr = String(rawItem.id);
-        const adsetIdStr = String(rawItem.adset_id || rawItem.adset?.id || '');
-        const campaignIdStr = String(rawItem.campaign_id || rawItem.campaign?.id || '');
         return {
           id: adIdStr,
           adset_id: adsetIdStr,
           adset_name: rawItem.adset?.name || adsetMap.get(adsetIdStr) || `Conjunto ${adsetIdStr}`,
           campaign_id: campaignIdStr,
           campaign_name: rawItem.campaign?.name || `Campanha ${campaignIdStr}`,
-          name: rawItem.name || 'Anúncio Meta',
+          name: rawItem.name || `Anúncio ${adIdStr}`,
           status: (rawItem.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED') as 'ACTIVE' | 'PAUSED',
           effective_status: rawItem.effective_status || rawItem.status || 'PAUSED',
           deliveryInfo: { code: 'ACTIVE' as const, label: 'Ativo', badgeColor: 'green' as const },
@@ -1263,7 +1264,7 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
     const fallbackList = masterAdsStore.get(normAcc) || [];
     return fallbackList.map((rawItem: any) => {
       const creative = rawItem.creative || {};
-      const adIdStr = String(rawItem.id);
+      const adIdStr = String(rawItem.id || '');
       const adsetIdStr = String(rawItem.adset_id || rawItem.adset?.id || '');
       const campaignIdStr = String(rawItem.campaign_id || rawItem.campaign?.id || '');
       return {

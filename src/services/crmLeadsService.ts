@@ -235,39 +235,78 @@ export const MOCK_CRM_LEADS: CrmLead[] = [
   }
 ];
 
+// Helper de timeout seguro para requisições assíncronas do Supabase
+const withTimeout = async <T>(promiseLike: PromiseLike<T>, timeoutMs = 5000): Promise<T> => {
+  let timer: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timeout de ${timeoutMs}ms excedido na operação do banco de dados.`)), timeoutMs);
+  });
+  try {
+    return await Promise.race([Promise.resolve(promiseLike), timeoutPromise]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 export async function fetchCrmLeads(): Promise<CrmLead[]> {
   try {
-    const { data, error } = await supabase
+    const fetchPromise = supabase
       .from('crm_leads')
       .select('*')
       .order('data_hora', { ascending: false });
 
+    const { data, error } = await withTimeout(fetchPromise, 5000);
+
     if (error) {
-      console.warn('Supabase crm_leads fetch warning (using mock seed fallback):', error.message);
+      console.warn('⚠️ [CRM LEADS SERVICE] Supabase crm_leads fetch warning (usando mock fallback):', error.message);
       return MOCK_CRM_LEADS;
     }
 
     if (data && data.length > 0) {
       return data as CrmLead[];
     }
-  } catch (err) {
-    console.warn('CRM leads service exception (using mock seed fallback):', err);
+  } catch (err: any) {
+    console.warn('⚠️ [CRM LEADS SERVICE] Exceção na busca de leads CRM (usando mock fallback):', err?.message || err);
   }
 
   return MOCK_CRM_LEADS;
 }
 
+// O(N) Single-Pass Funnel Metric Aggregator (Zero Array.prototype.filter allocations)
 export function computeCrmLeadSummary(leads: CrmLead[]): CrmLeadSummary {
   const totalLeads = leads.length;
-  const agendamentos = leads.filter(l => l.agendamento === 'Sim');
-  const totalAgendamentos = agendamentos.length;
-  const taxaAgendamentoPct = totalLeads > 0 ? (totalAgendamentos / totalLeads) * 100 : 0;
+  if (totalLeads === 0) {
+    return {
+      totalLeads: 0,
+      totalAgendamentos: 0,
+      taxaAgendamentoPct: 0,
+      totalVendas: 0,
+      taxaConversaoVendasPct: 0,
+      faturamentoTotal: 0,
+      ticketMedio: 0
+    };
+  }
 
-  const vendas = leads.filter(l => l.venda === 'Sim');
-  const totalVendas = vendas.length;
+  let totalAgendamentos = 0;
+  let totalVendas = 0;
+  let faturamentoTotal = 0;
+
+  for (let i = 0; i < totalLeads; i++) {
+    const lead = leads[i];
+    const isAgendado = (lead.agendamento || '').trim().toLowerCase() === 'sim';
+    const isVenda = (lead.venda || '').trim().toLowerCase() === 'sim';
+
+    if (isAgendado) totalAgendamentos++;
+    if (isVenda) totalVendas++;
+    
+    const valor = Number(lead.valor_conversao);
+    if (!isNaN(valor) && valor > 0) {
+      faturamentoTotal += valor;
+    }
+  }
+
+  const taxaAgendamentoPct = (totalAgendamentos / totalLeads) * 100;
   const taxaConversaoVendasPct = totalAgendamentos > 0 ? (totalVendas / totalAgendamentos) * 100 : 0;
-
-  const faturamentoTotal = leads.reduce((sum, lead) => sum + (Number(lead.valor_conversao) || 0), 0);
   const ticketMedio = totalVendas > 0 ? faturamentoTotal / totalVendas : 0;
 
   return {
@@ -283,20 +322,97 @@ export function computeCrmLeadSummary(leads: CrmLead[]): CrmLeadSummary {
 
 export async function saveCrmLead(lead: Partial<CrmLead>): Promise<CrmLead | null> {
   try {
-    const { data, error } = await supabase
+    const savePromise = supabase
       .from('crm_leads')
       .upsert(lead)
       .select()
       .single();
 
+    const { data, error } = await withTimeout(savePromise, 5000);
+
     if (error) {
-      console.error('Failed to save CRM Lead to Supabase:', error.message);
+      console.error('❌ [CRM LEADS SERVICE] Falha ao salvar CRM Lead no Supabase:', error.message);
       return null;
     }
 
     return data as CrmLead;
-  } catch (err) {
-    console.error('Exception saving CRM Lead:', err);
+  } catch (err: any) {
+    console.error('❌ [CRM LEADS SERVICE] Exceção ao salvar CRM Lead:', err?.message || err);
     return null;
+  }
+}
+
+export interface NewManualLeadInput {
+  data_hora: string;
+  nome: string;
+  telefone?: string;
+  campaign_id?: string;
+  ad_id?: string;
+  agendamento: 'Sim' | 'Não' | string;
+  venda: 'Sim' | 'Não' | string;
+  valor_conversao?: number;
+}
+
+export async function createManualCrmLead(input: NewManualLeadInput): Promise<{ success: boolean; data?: CrmLead; error?: string }> {
+  try {
+    const nowIso = new Date().toISOString();
+    const uniqueEmail = `lead_manual_${Date.now()}_${Math.random().toString(36).substring(2, 7)}@sem-email.com`;
+    
+    let parsedDate = nowIso;
+    if (input.data_hora) {
+      const d = new Date(input.data_hora);
+      parsedDate = !isNaN(d.getTime()) ? d.toISOString() : nowIso;
+    }
+
+    const newLeadRecord = {
+      data_hora: parsedDate,
+      nome: input.nome.trim(),
+      telefone: (input.telefone || '').trim(),
+      email: uniqueEmail,
+      clinica: '',
+      especialidade: '',
+      objetivo_principal: '',
+      faturamento: '',
+      trafego_pago: '',
+      prazo_estimado: '',
+      score_pontos: 0,
+      tipo_lead: 'MANUAL',
+      campaign_id: (input.campaign_id || '').trim(),
+      adset_id: '',
+      ad_id: (input.ad_id || '').trim(),
+      sdr: 'Manual',
+      agendamento: input.agendamento || 'Não',
+      venda: input.venda || 'Não',
+      valor_conversao: input.venda === 'Sim' ? (Number(input.valor_conversao) || 0) : 0,
+      updated_at: nowIso
+    };
+
+    const insertPromise = supabase
+      .from('crm_leads')
+      .insert([newLeadRecord])
+      .select()
+      .single();
+
+    const { data, error } = await withTimeout(insertPromise, 5000);
+
+    if (error) {
+      console.warn('⚠️ [CRM LEADS SERVICE] Erro ao cadastrar lead no Supabase (atualizando mock local):', error.message);
+      // Mock Fallback se o Supabase não estiver conectado no momento
+      const localMockLead: CrmLead = {
+        id: `lead_${Date.now()}`,
+        ...newLeadRecord,
+        created_at: parsedDate
+      };
+      MOCK_CRM_LEADS.unshift(localMockLead);
+      return { success: true, data: localMockLead };
+    }
+
+    // Se o mock estiver sendo usado em memória, também adiciona ao topo
+    MOCK_CRM_LEADS.unshift(data as CrmLead);
+
+    return { success: true, data: data as CrmLead };
+  } catch (err: any) {
+    console.error('❌ [CRM LEADS SERVICE] Exceção ao cadastrar lead manual:', err?.message || err);
+    return { success: false, error: err?.message || 'Falha ao salvar lead.' };
   }
 }
