@@ -100,9 +100,9 @@ export const MiningView: React.FC = () => {
   const [competitorFolders, setCompetitorFolders] = useState<MonitoredCompetitorFolder[]>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_FOLDERS_KEY);
-      if (stored) {
+      if (stored !== null) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
       return [
         {
@@ -223,7 +223,13 @@ export const MiningView: React.FC = () => {
       setCompetitorFolders(prev => {
         const exists = prev.some(f => f.competitor.facebookId === result.pageId);
         if (exists) return prev;
-        return [newFolder, ...prev];
+        const updated = [newFolder, ...prev];
+        try {
+          localStorage.setItem(STORAGE_FOLDERS_KEY, JSON.stringify(updated));
+        } catch (e) {
+          console.error(e);
+        }
+        return updated;
       });
 
       setToast({ 
@@ -254,12 +260,23 @@ export const MiningView: React.FC = () => {
     });
   };
 
-  // Remove competitor folder manually
-  const handleRemoveCompetitorFolder = (folderId: string, competitorName: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (window.confirm(`Deseja remover a pasta do cliente ${competitorName}?`)) {
-      setCompetitorFolders(prev => prev.filter(f => f.id !== folderId));
-    }
+  // Remove competitor folder immediately with confirmation toast
+  const handleRemoveCompetitorFolder = (folderId: string, competitorName: string) => {
+    setCompetitorFolders(prev => {
+      const updated = prev.filter(f => f.id !== folderId && f.competitor.name !== competitorName);
+      try {
+        localStorage.setItem(STORAGE_FOLDERS_KEY, JSON.stringify(updated));
+      } catch (err) {
+        console.error('Erro ao salvar no localStorage:', err);
+      }
+      return updated;
+    });
+
+    setToast({
+      type: 'success',
+      message: `✓ Pasta de "${competitorName}" deletada com sucesso!`
+    });
+    setTimeout(() => setToast(null), 3500);
   };
 
   // If a competitor folder is opened, render the full Meta Ads Library View
@@ -291,8 +308,8 @@ export const MiningView: React.FC = () => {
       {toast && (
         <div className={`fixed top-5 right-5 z-50 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 border text-xs font-extrabold animate-bounce ${
           toast.type === 'success' 
-            ? 'bg-brand-neon text-black border-black/20' 
-            : 'bg-rose-500 text-white border-rose-600'
+            ? 'bg-brand-neon text-black border-black/20 shadow-brand-neon/20' 
+            : 'bg-rose-500 text-white border-rose-600 shadow-rose-500/20'
         }`}>
           {toast.type === 'success' ? (
             <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
@@ -470,11 +487,16 @@ export const MiningView: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Botão de Deletar Pasta do Cliente */}
                   <button
                     type="button"
-                    onClick={(e) => handleRemoveCompetitorFolder(item.id, item.competitor.name, e)}
-                    className="text-zinc-600 hover:text-red-400 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
-                    title="Remover pasta de cliente"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      handleRemoveCompetitorFolder(item.id, item.competitor.name);
+                    }}
+                    className="text-zinc-500 hover:text-red-400 p-2 rounded-xl hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all cursor-pointer z-10"
+                    title="Deletar pasta do cliente"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
