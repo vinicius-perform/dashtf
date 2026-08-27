@@ -9,10 +9,13 @@ import {
   MoreHorizontal, 
   CheckCircle2, 
   X, 
-  Info
+  Info,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { CompetitorDetails } from './MiningView';
 import { generateDynamicAdsForPage } from '../services/metaDataEngine';
+import { supabase } from '../lib/supabase';
 
 export interface LibraryAd {
   id: string;
@@ -43,8 +46,8 @@ export interface LibraryAd {
 
 interface MetaAdsLibraryViewProps {
   competitor: CompetitorDetails;
-  savedSwipes: string[];
-  onToggleSwipe: (id: string) => void;
+  savedSwipes: (string | LibraryAd)[];
+  onToggleSwipe: (id: string, fullAd?: LibraryAd) => void;
   onBack: () => void;
   onOpenTransparency: () => void;
 }
@@ -143,6 +146,8 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
   const [selectedAdForModal, setSelectedAdForModal] = useState<LibraryAd | null>(null);
   const [activeStatusOnline, setActiveStatusOnline] = useState(true);
   const [onlySavedFilter, setOnlySavedFilter] = useState(false);
+  const [savingAdId, setSavingAdId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // 100% Dynamic profile variables extracted from competitor prop
   const profileName = competitor.name || 'Cliente Monitorado';
@@ -157,16 +162,21 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
     return generateDynamicAdsForPage(profileName, competitor.facebookId || 'page');
   }, [competitor, profileName]);
 
+  // Helper to check if an ad is saved in swipe file
+  const isAdSaved = (adId: string) => {
+    return savedSwipes.some(s => (typeof s === 'string' ? s === adId : s.id === adId));
+  };
+
   // Count how many ads from this library are saved
   const savedCountInLibrary = useMemo(() => {
-    return libraryAds.filter(a => savedSwipes.includes(a.id)).length;
+    return libraryAds.filter(a => isAdSaved(a.id)).length;
   }, [libraryAds, savedSwipes]);
 
   // Filtered Ads
   const filteredAds = useMemo(() => {
     return libraryAds.filter(ad => {
       if (activeStatusOnline && ad.status !== 'Ativo') return false;
-      if (onlySavedFilter && !savedSwipes.includes(ad.id)) return false;
+      if (onlySavedFilter && !isAdSaved(ad.id)) return false;
       if (mediaTypeFilter !== 'ALL' && ad.mediaType !== mediaTypeFilter) return false;
       if (platformFilter !== 'ALL' && !ad.platforms.includes(platformFilter)) return false;
 
@@ -183,8 +193,100 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
     });
   }, [libraryAds, searchQuery, mediaTypeFilter, platformFilter, activeStatusOnline, onlySavedFilter, savedSwipes]);
 
+  // Processo de Download e Upload Permanente para Supabase Storage
+  const handleSaveToSwipePermanent = async (ad: LibraryAd) => {
+    if (isAdSaved(ad.id)) {
+      onToggleSwipe(ad.id);
+      setToast({
+        type: 'success',
+        message: 'Item removido do Swipe File.'
+      });
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
+
+    setSavingAdId(ad.id);
+    setToast(null);
+
+    let permanentVideoUrl = ad.videoUrl;
+
+    if (ad.videoUrl) {
+      try {
+        // 1. Fetch da URL original do vídeo e conversão para Blob
+        const response = await fetch(ad.videoUrl);
+        if (!response.ok) {
+          throw new Error(`Falha no download do vídeo (${response.status})`);
+        }
+        const blob = await response.blob();
+
+        // 2. Geração de nome de arquivo único
+        const cleanId = (ad.libraryId || ad.id).replace(/[^a-zA-Z0-9]/g, '');
+        const fileName = `swipe_${cleanId}_${Date.now()}.mp4`;
+
+        // 3. Upload para o bucket 'swipe_videos' do Supabase
+        const { error: uploadError } = await supabase.storage
+          .from('swipe_videos')
+          .upload(fileName, blob, {
+            contentType: 'video/mp4',
+            upsert: true
+          });
+
+        if (uploadError) {
+          console.warn('Upload Supabase Storage aviso:', uploadError.message);
+        } else {
+          // 4. Obtenção da URL pública permanente
+          const { data: publicUrlData } = supabase.storage
+            .from('swipe_videos')
+            .getPublicUrl(fileName);
+
+          if (publicUrlData?.publicUrl) {
+            permanentVideoUrl = publicUrlData.publicUrl;
+          }
+        }
+      } catch (corsErr: any) {
+        console.warn('Erro ao baixar vídeo para storage:', corsErr);
+        setToast({
+          type: 'error',
+          message: 'Erro ao baixar o vídeo original. Proteção CORS ativa.'
+        });
+        setTimeout(() => setToast(null), 4000);
+      }
+    }
+
+    // 5. Consolidação do Swipe com a URL permanente
+    const consolidatedAd: LibraryAd = {
+      ...ad,
+      videoUrl: permanentVideoUrl
+    };
+
+    onToggleSwipe(consolidatedAd.id, consolidatedAd);
+
+    setToast({
+      type: 'success',
+      message: '✓ Criativo salvo permanentemente no cofre!'
+    });
+    setTimeout(() => setToast(null), 3500);
+    setSavingAdId(null);
+  };
+
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="space-y-6 animate-fadeIn relative">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-5 right-5 z-50 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 border text-xs font-extrabold animate-bounce ${
+          toast.type === 'success' 
+            ? 'bg-brand-neon text-black border-black/20 shadow-brand-neon/20' 
+            : 'bg-rose-500 text-white border-rose-600 shadow-rose-500/20'
+        }`}>
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+          ) : (
+            <AlertCircle className="w-4 h-4 stroke-[2.5]" />
+          )}
+          <span>{toast.message}</span>
+        </div>
+      )}
+
       {/* 1. Top Meta Ads Navigation Bar */}
       <div className="bg-brand-sidebar border border-brand-border rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-lg">
         <div className="flex items-center gap-3">
@@ -400,7 +502,8 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
       {/* 4. Multi-Column Grid of Dynamic Meta Ads Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {filteredAds.map((ad) => {
-          const isSaved = savedSwipes.includes(ad.id);
+          const isSaved = isAdSaved(ad.id);
+          const isSaving = savingAdId === ad.id;
           const copyText = ad.copy || ad.adCopy;
           const displayAdvertiser = ad.advertiser || profileName;
 
@@ -469,17 +572,33 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
                     <span>Ver detalhes do anúncio</span>
                   </button>
 
+                  {/* Botão de Salvar no Swipe com Upload para Supabase Storage */}
                   <button
                     type="button"
-                    onClick={() => onToggleSwipe(ad.id)}
-                    className={`w-full py-1.5 rounded-xl text-xs font-extrabold transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer ${
+                    disabled={isSaving}
+                    onClick={() => handleSaveToSwipePermanent(ad)}
+                    className={`w-full py-1.5 rounded-xl text-xs font-extrabold transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 ${
                       isSaved
                         ? 'bg-lime-400/15 border border-lime-400 text-lime-400 shadow-md shadow-lime-400/10'
                         : 'bg-indigo-600/90 hover:bg-indigo-600 border border-indigo-500 text-white shadow-md shadow-indigo-600/20'
                     }`}
                   >
-                    <Bookmark className={`w-3.5 h-3.5 ${isSaved ? 'text-lime-400 fill-lime-400' : 'text-white fill-white'}`} />
-                    <span>{isSaved ? 'SALVO NO SWIPE' : 'SAVE'}</span>
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                        <span>Salvando...</span>
+                      </>
+                    ) : isSaved ? (
+                      <>
+                        <Bookmark className="w-3.5 h-3.5 text-lime-400 fill-lime-400" />
+                        <span>SALVO NO SWIPE</span>
+                      </>
+                    ) : (
+                      <>
+                        <Bookmark className="w-3.5 h-3.5 text-white fill-white" />
+                        <span>SAVE</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -631,15 +750,30 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
                 <div className="space-y-2 pt-4 border-t border-brand-border">
                   <button
                     type="button"
-                    onClick={() => onToggleSwipe(selectedAdForModal.id)}
-                    className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                      savedSwipes.includes(selectedAdForModal.id)
+                    disabled={savingAdId === selectedAdForModal.id}
+                    onClick={() => handleSaveToSwipePermanent(selectedAdForModal)}
+                    className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 ${
+                      isAdSaved(selectedAdForModal.id)
                         ? 'bg-lime-400/15 border border-lime-400 text-lime-400 shadow-md'
                         : 'bg-brand-neon hover:bg-brand-neonHover text-black font-extrabold shadow-md shadow-brand-neon/20'
                     }`}
                   >
-                    <Bookmark className={`w-4 h-4 ${savedSwipes.includes(selectedAdForModal.id) ? 'fill-lime-400' : 'fill-black'}`} />
-                    <span>{savedSwipes.includes(selectedAdForModal.id) ? 'SALVO NO SWIPE FILE' : 'SALVAR NO SWIPE FILE'}</span>
+                    {savingAdId === selectedAdForModal.id ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-current" />
+                        <span>Salvando...</span>
+                      </>
+                    ) : isAdSaved(selectedAdForModal.id) ? (
+                      <>
+                        <Bookmark className="w-4 h-4 fill-lime-400 text-lime-400" />
+                        <span>SALVO NO SWIPE FILE</span>
+                      </>
+                    ) : (
+                      <>
+                        <Bookmark className="w-4 h-4 fill-black text-black" />
+                        <span>SALVAR NO SWIPE FILE</span>
+                      </>
+                    )}
                   </button>
 
                   <div className="grid grid-cols-2 gap-2">

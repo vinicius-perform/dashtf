@@ -125,7 +125,7 @@ export const MiningView: React.FC = () => {
   });
 
   // Persistent Saved Swipes loaded from localStorage
-  const [savedSwipes, setSavedSwipes] = useState<string[]>(() => {
+  const [savedSwipes, setSavedSwipes] = useState<(string | LibraryAd)[]>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_SAVED_SWIPES_KEY);
       return stored ? JSON.parse(stored) : [];
@@ -274,13 +274,22 @@ export const MiningView: React.FC = () => {
     }
   };
 
-  // Toggle Save to Swipe File
-  const handleToggleSwipe = (id: string) => {
+  // Toggle Save to Swipe File (Consolidated Object & Persistence)
+  const handleToggleSwipe = (id: string, fullAd?: LibraryAd) => {
     setSavedSwipes(prev => {
-      const isAlreadySaved = prev.includes(id);
-      return isAlreadySaved 
-        ? prev.filter(item => item !== id) 
-        : [...prev, id];
+      const isAlreadySaved = prev.some(item => (typeof item === 'string' ? item === id : item.id === id));
+      let updated: (string | LibraryAd)[];
+      if (isAlreadySaved) {
+        updated = prev.filter(item => (typeof item === 'string' ? item !== id : item.id !== id));
+      } else {
+        updated = [...prev, fullAd || id];
+      }
+      try {
+        localStorage.setItem(STORAGE_SAVED_SWIPES_KEY, JSON.stringify(updated));
+      } catch (err) {
+        console.error('Erro ao salvar swipes no localStorage:', err);
+      }
+      return updated;
     });
   };
 
