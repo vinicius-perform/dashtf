@@ -228,6 +228,25 @@ export const MiningView: React.FC = () => {
     });
   };
 
+  // Save all ads from a competitor directly to Swipe File
+  const handleSaveAllCompetitorAdsToSwipe = (competitorName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const mockAds = GENERATE_MOCK_LIBRARY(competitorName);
+    const adIds = mockAds.map(a => a.id);
+    
+    setSavedSwipes(prev => {
+      const allSaved = adIds.every(id => prev.includes(id));
+      if (allSaved) {
+        // If all are already saved, remove them
+        return prev.filter(id => !adIds.includes(id));
+      } else {
+        // Otherwise add all of them
+        const newSet = new Set([...prev, ...adIds]);
+        return Array.from(newSet);
+      }
+    });
+  };
+
   // Remove competitor folder manually
   const handleRemoveCompetitorFolder = (folderId: string, competitorName: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -451,16 +470,50 @@ export const MiningView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Primary Button to Open Full Meta Ads Library */}
-                <button
-                  type="button"
-                  onClick={() => setActiveLibraryCompetitor(item.competitor)}
-                  className="w-full bg-brand-neon hover:bg-brand-neonHover text-black font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-md shadow-brand-neon/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
-                >
-                  <Eye className="w-4 h-4" />
-                  <span>Abrir Biblioteca Meta Ads</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
+                {/* Action Buttons inside Client Folder Card */}
+                <div className="space-y-2 pt-1">
+                  {/* Button 1: Open Full Meta Ads Library */}
+                  <button
+                    type="button"
+                    onClick={() => setActiveLibraryCompetitor(item.competitor)}
+                    className="w-full bg-brand-neon hover:bg-brand-neonHover text-black font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-md shadow-brand-neon/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                  >
+                    <Eye className="w-4 h-4" />
+                    <span>Abrir Biblioteca Meta Ads</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+
+                  {/* Button 2: Enviar para o Swipe */}
+                  {(() => {
+                    const competitorAds = allKnownAds;
+                    const savedInThisCompetitor = competitorAds.filter(a => savedSwipes.includes(a.id)).length;
+                    const isAllSaved = savedInThisCompetitor === competitorAds.length && competitorAds.length > 0;
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={(e) => handleSaveAllCompetitorAdsToSwipe(item.competitor.name, e)}
+                        className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                          isAllSaved
+                            ? 'bg-lime-400/15 border border-lime-400 text-lime-400 shadow-md shadow-lime-400/10 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400'
+                            : savedInThisCompetitor > 0
+                            ? 'bg-zinc-800 border border-lime-400/50 text-lime-300 hover:bg-lime-400 hover:text-black'
+                            : 'bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 hover:text-white border border-zinc-700 shadow-sm'
+                        }`}
+                        title="Enviar todos os anúncios deste cliente para o Swipe File"
+                      >
+                        <Bookmark className={`w-3.5 h-3.5 ${savedInThisCompetitor > 0 ? 'fill-lime-400 text-lime-400' : 'text-zinc-400'}`} />
+                        <span>
+                          {isAllSaved 
+                            ? `💾 Salvo no Swipe (${savedInThisCompetitor} ads - Remover)` 
+                            : savedInThisCompetitor > 0
+                            ? `💾 Enviar p/ Swipe (${savedInThisCompetitor}/${competitorAds.length} salvos)`
+                            : '💾 Enviar para o Swipe'}
+                        </span>
+                      </button>
+                    );
+                  })()}
+                </div>
               </div>
             ))}
           </div>
