@@ -15,7 +15,9 @@ import {
   Eye,
   Clock,
   Sparkles,
-  Filter
+  Filter,
+  Calendar,
+  ChevronDown
 } from 'lucide-react';
 
 export interface SmmClientAudit {
@@ -103,6 +105,7 @@ export const mockAuditData: SmmClientAudit[] = [
 export const SmmAuditView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OK' | 'PENDING'>('ALL');
+  const [dateFilter, setDateFilter] = useState('ontem');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedAuditPost, setSelectedAuditPost] = useState<SmmClientAudit | null>(null);
 
@@ -294,9 +297,30 @@ export const SmmAuditView: React.FC = () => {
               Falhas ({kpis.failedDeliveries})
             </button>
           </div>
+
+          {/* Period Filter Dropdown */}
+          <div className="relative flex items-center">
+            <div className="absolute left-3 pointer-events-none text-zinc-400 flex items-center">
+              <Calendar className="w-3.5 h-3.5 text-brand-neon" />
+            </div>
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="bg-brand-bg hover:bg-zinc-900 border border-brand-border hover:border-zinc-700 text-zinc-200 text-xs font-semibold rounded-xl pl-8.5 pr-8 py-2 focus:outline-none focus:border-brand-neon focus:ring-1 focus:ring-brand-neon transition-all cursor-pointer appearance-none shadow-sm"
+            >
+              <option value="ontem" className="bg-zinc-900 text-white">Ontem (Padrão)</option>
+              <option value="hoje" className="bg-zinc-900 text-white">Hoje</option>
+              <option value="ultimos_7_dias" className="bg-zinc-900 text-white">Últimos 7 dias</option>
+              <option value="este_mes" className="bg-zinc-900 text-white">Este Mês</option>
+              <option value="personalizado" className="bg-zinc-900 text-white">Período Personalizado...</option>
+            </select>
+            <div className="absolute right-2.5 pointer-events-none text-zinc-500 flex items-center">
+              <ChevronDown className="w-3.5 h-3.5" />
+            </div>
+          </div>
         </div>
 
-        <div className="text-xs text-zinc-400 font-medium">
+        <div className="text-xs text-zinc-400 font-medium ml-auto whitespace-nowrap">
           Exibindo <span className="text-white font-bold">{filteredData.length}</span> de {mockAuditData.length} clientes
         </div>
       </div>
