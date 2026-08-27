@@ -20,12 +20,12 @@ import {
   GitMerge, 
   RotateCcw, 
   MapPin, 
-  Folder, 
   FolderOpen, 
   ChevronRight,
-  Eye
+  Eye,
+  Trash2
 } from 'lucide-react';
-import { MetaAdsLibraryView } from './MetaAdsLibraryView';
+import { MetaAdsLibraryView, GENERATE_MOCK_LIBRARY } from './MetaAdsLibraryView';
 
 export interface CompetitorDetails {
   name: string;
@@ -59,6 +59,9 @@ export interface MonitoredCreative {
   classification: 'ESCALADO' | 'TESTE';
   adUrl: string;
 }
+
+const STORAGE_SAVED_SWIPES_KEY = 'dashtf_mining_saved_swipes';
+const STORAGE_MINED_ADS_KEY = 'dashtf_mining_monitored_creatives';
 
 const DEFAULT_SAMPLE_COMPETITOR: CompetitorDetails = {
   name: 'pietro.boscardin',
@@ -99,13 +102,50 @@ const InstagramIcon = () => (
 
 export const MiningView: React.FC = () => {
   const [urlInput, setUrlInput] = useState('');
-  const [minedAds, setMinedAds] = useState<MonitoredCreative[]>([]);
-  const [activeTab, setActiveTab] = useState<'acompanhamento' | 'escalados' | 'tempo_ativo'>('acompanhamento');
+  
+  // Persistent Mined Ads loaded from localStorage
+  const [minedAds, setMinedAds] = useState<MonitoredCreative[]>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_MINED_ADS_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [activeTab, setActiveTab] = useState<'acompanhamento' | 'escalados' | 'tempo_ativo' | 'salvos'>('acompanhamento');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [savedSwipes, setSavedSwipes] = useState<string[]>([]);
+
+  // Persistent Saved Swipes loaded from localStorage
+  const [savedSwipes, setSavedSwipes] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_SAVED_SWIPES_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedCompetitor, setSelectedCompetitor] = useState<CompetitorDetails | null>(null);
   const [activeLibraryCompetitor, setActiveLibraryCompetitor] = useState<CompetitorDetails | null>(null);
+
+  // Sync state to localStorage on changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_SAVED_SWIPES_KEY, JSON.stringify(savedSwipes));
+    } catch (e) {
+      console.error('Error saving swipes to localStorage', e);
+    }
+  }, [savedSwipes]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_MINED_ADS_KEY, JSON.stringify(minedAds));
+    } catch (e) {
+      console.error('Error saving mined ads to localStorage', e);
+    }
+  }, [minedAds]);
 
   // Close modal on ESC key
   useEffect(() => {
@@ -212,19 +252,65 @@ export const MiningView: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // Toggle Save to Swipe File
+  // Toggle Save to Swipe File (Persistent until manual removal)
   const handleToggleSwipe = (id: string) => {
-    setSavedSwipes(prev => 
-      prev.includes(id) 
+    setSavedSwipes(prev => {
+      const isAlreadySaved = prev.includes(id);
+      return isAlreadySaved 
         ? prev.filter(item => item !== id) 
-        : [...prev, id]
-    );
+        : [...prev, id];
+    });
+
+    // If saving an ad from Meta Ads Library that is not yet in minedAds, ensure it is added
+    if (!savedSwipes.includes(id)) {
+      setMinedAds(prev => {
+        if (prev.some(a => a.id === id)) return prev;
+        
+        const mockLibrary = GENERATE_MOCK_LIBRARY('pietro.boscardin');
+        const found = mockLibrary.find(a => a.id === id);
+        if (found) {
+          const newCreative: MonitoredCreative = {
+            id: found.id,
+            adTitle: found.adCopy.slice(0, 50) + '...',
+            adType: found.mediaType,
+            videoDuration: found.videoDuration,
+            competitor: {
+              ...DEFAULT_SAMPLE_COMPETITOR,
+              name: 'pietro.boscardin'
+            },
+            daysActive: found.daysActive,
+            startDate: found.startDate,
+            platforms: found.platforms.filter((p): p is ('facebook' | 'instagram') => p === 'facebook' || p === 'instagram'),
+            classification: found.classification,
+            adUrl: `https://www.facebook.com/ads/library/?id=${found.libraryId}`
+          };
+          return [newCreative, ...prev];
+        }
+        return prev;
+      });
+    }
+  };
+
+  // Remove competitor folder manually
+  const handleRemoveCompetitorFolder = (competitorName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm(`Deseja remover a pasta e todos os anúncios monitorados de ${competitorName}?`)) {
+      setMinedAds(prev => prev.filter(a => a.competitor.name.toLowerCase() !== competitorName.toLowerCase()));
+    }
+  };
+
+  // Remove single ad from table manually
+  const handleRemoveAd = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMinedAds(prev => prev.filter(a => a.id !== id));
+    setSavedSwipes(prev => prev.filter(s => s !== id));
   };
 
   // Filtered creatives according to active tab & search
   const filteredCreatives = useMemo(() => {
     return minedAds.filter(c => {
       // Tab filter
+      if (activeTab === 'salvos' && !savedSwipes.includes(c.id)) return false;
       if (activeTab === 'escalados' && c.classification !== 'ESCALADO') return false;
       if (activeTab === 'tempo_ativo' && c.daysActive < 10) return false;
 
@@ -237,7 +323,7 @@ export const MiningView: React.FC = () => {
       }
       return true;
     });
-  }, [minedAds, activeTab, searchFilter]);
+  }, [minedAds, activeTab, searchFilter, savedSwipes]);
 
   // If a competitor folder is opened, render the full Meta Ads Library View
   if (activeLibraryCompetitor) {
@@ -382,7 +468,7 @@ export const MiningView: React.FC = () => {
               <span>Pastas de Clientes Monitorados (Meta Ads Library)</span>
             </h3>
             <span className="text-xs text-zinc-400">
-              Clique para abrir a biblioteca completa do cliente
+              Salvo no seu perfil permanentemente até remoção
             </span>
           </div>
 
@@ -415,9 +501,15 @@ export const MiningView: React.FC = () => {
                     </div>
                   </div>
 
-                  <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                    Ativo
-                  </span>
+                  {/* Remove Folder Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleRemoveCompetitorFolder(item.competitor.name, e)}
+                    className="text-zinc-600 hover:text-red-400 p-1 rounded-lg hover:bg-zinc-800 transition-colors"
+                    title="Remover pasta de cliente"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
 
                 {/* Quick metrics inside folder card */}
@@ -490,6 +582,19 @@ export const MiningView: React.FC = () => {
           >
             📈 Tempo Ativo
           </button>
+
+          {/* Aba 4: 💾 Swipe File (Salvos) */}
+          <button
+            onClick={() => setActiveTab('salvos')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'salvos'
+                ? 'border border-lime-400 text-lime-400 bg-lime-400/10 shadow-sm shadow-lime-400/10'
+                : 'border border-brand-border bg-brand-card text-zinc-400 hover:text-white hover:border-zinc-700'
+            }`}
+          >
+            <Bookmark className={`w-3.5 h-3.5 ${activeTab === 'salvos' ? 'fill-lime-400' : ''}`} />
+            <span>💾 Swipe File ({savedSwipes.length})</span>
+          </button>
         </div>
 
         {/* Search Input for Table */}
@@ -538,7 +643,9 @@ export const MiningView: React.FC = () => {
               ) : filteredCreatives.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-10 text-center text-zinc-500 text-xs">
-                    Nenhum criativo encontrado para os filtros selecionados.
+                    {activeTab === 'salvos' 
+                      ? 'Nenhum anúncio salvo no Swipe File ainda. Clique em "Save to Swipe File" para salvar.' 
+                      : 'Nenhum criativo encontrado para os filtros selecionados.'}
                   </td>
                 </tr>
               ) : (
@@ -682,23 +789,35 @@ export const MiningView: React.FC = () => {
                           </button>
 
                           {/* Save to Swipe File */}
-                          <button
-                            type="button"
-                            onClick={() => handleToggleSwipe(creative.id)}
-                            className={`w-36 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all duration-200 cursor-pointer ${
-                              isSaved
-                                ? 'border-lime-400 bg-lime-400/10 text-lime-400 font-bold shadow-sm shadow-lime-400/10'
-                                : 'border-gray-700 bg-transparent hover:bg-zinc-800/60 hover:border-zinc-500 text-zinc-300'
-                            }`}
-                            title={isSaved ? "Remover do Swipe File" : "Salvar no Swipe File"}
-                          >
-                            <Bookmark 
-                              className={`w-3.5 h-3.5 transition-colors ${
-                                isSaved ? 'text-lime-400 fill-lime-400' : 'text-zinc-400'
-                              }`} 
-                            />
-                            <span>{isSaved ? '💾 Salvo no Swipe' : '💾 Save to Swipe File'}</span>
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSwipe(creative.id)}
+                              className={`w-32 flex items-center justify-center gap-1.5 px-2 py-1 rounded-lg border text-[11px] font-medium transition-all duration-200 cursor-pointer ${
+                                isSaved
+                                  ? 'border-lime-400 bg-lime-400/10 text-lime-400 font-bold shadow-sm shadow-lime-400/10'
+                                  : 'border-gray-700 bg-transparent hover:bg-zinc-800/60 hover:border-zinc-500 text-zinc-300'
+                              }`}
+                              title={isSaved ? "Remover do Swipe File" : "Salvar no Swipe File"}
+                            >
+                              <Bookmark 
+                                className={`w-3.5 h-3.5 transition-colors ${
+                                  isSaved ? 'text-lime-400 fill-lime-400' : 'text-zinc-400'
+                                }`} 
+                              />
+                              <span>{isSaved ? '💾 Salvo' : '💾 Save Swipe'}</span>
+                            </button>
+
+                            {/* Remove ad button */}
+                            <button
+                              type="button"
+                              onClick={(e) => handleRemoveAd(creative.id, e)}
+                              className="p-1 text-zinc-600 hover:text-red-400 hover:bg-zinc-800 rounded transition-colors"
+                              title="Remover anúncio"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </td>
                     </tr>

@@ -52,7 +52,7 @@ interface MetaAdsLibraryViewProps {
 }
 
 // Generate realistic ads for the competitor's Meta Ads Library
-const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
+export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
   {
     id: 'meta-ad-1',
     libraryId: '1657551919403741',
@@ -228,15 +228,22 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
   const [mediaTypeFilter, setMediaTypeFilter] = useState<'ALL' | 'video' | 'image'>('ALL');
   const [selectedAdForModal, setSelectedAdForModal] = useState<LibraryAd | null>(null);
   const [activeStatusOnline, setActiveStatusOnline] = useState(true);
+  const [onlySavedFilter, setOnlySavedFilter] = useState(false);
 
   const libraryAds = useMemo(() => {
     return GENERATE_MOCK_LIBRARY(competitor.name);
   }, [competitor.name]);
 
+  // Count how many ads from this library are saved
+  const savedCountInLibrary = useMemo(() => {
+    return libraryAds.filter(a => savedSwipes.includes(a.id)).length;
+  }, [libraryAds, savedSwipes]);
+
   // Filtered Ads
   const filteredAds = useMemo(() => {
     return libraryAds.filter(ad => {
       if (activeStatusOnline && ad.status !== 'Ativo') return false;
+      if (onlySavedFilter && !savedSwipes.includes(ad.id)) return false;
       if (mediaTypeFilter !== 'ALL' && ad.mediaType !== mediaTypeFilter) return false;
       if (platformFilter !== 'ALL' && !ad.platforms.includes(platformFilter)) return false;
 
@@ -249,7 +256,7 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
       }
       return true;
     });
-  }, [libraryAds, searchQuery, mediaTypeFilter, platformFilter, activeStatusOnline]);
+  }, [libraryAds, searchQuery, mediaTypeFilter, platformFilter, activeStatusOnline, onlySavedFilter, savedSwipes]);
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -421,8 +428,22 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
           </div>
         </div>
 
-        {/* Active Filter Pill */}
+        {/* Active Filter Pill & Saved Swipe Filter */}
         <div className="flex items-center gap-2">
+          {/* Filter by Saved in Swipe */}
+          <button
+            type="button"
+            onClick={() => setOnlySavedFilter(!onlySavedFilter)}
+            className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border transition-all cursor-pointer ${
+              onlySavedFilter
+                ? 'bg-lime-400/15 border-lime-400 text-lime-400 shadow-sm shadow-lime-400/10'
+                : 'bg-zinc-800/80 border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500'
+            }`}
+          >
+            <Bookmark className={`w-3.5 h-3.5 ${onlySavedFilter ? 'fill-lime-400 text-lime-400' : 'text-zinc-400'}`} />
+            <span>Salvos no Swipe ({savedCountInLibrary})</span>
+          </button>
+
           {activeStatusOnline && (
             <button
               type="button"
