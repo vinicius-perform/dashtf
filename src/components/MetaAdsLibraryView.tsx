@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { 
   ArrowLeft, 
   Search, 
@@ -25,14 +25,17 @@ export interface LibraryAd {
   partnerPage?: string;
   advertiser?: string;
   sponsored?: string;
+  copy?: string;
   adCopy: string;
   mediaType: 'video' | 'image';
   mediaUrl?: string;
-  videoUrl?: string;
+  videoUrl: string;
   thumbnailUrl: string;
   videoDuration?: string;
-  classification: 'ESCALADO' | 'TESTE';
+  classification?: 'ESCALADO' | 'TESTE';
+  cta?: string;
   ctaText: string;
+  linkDisplay?: string;
   targetDomain: string;
   impressionsRange?: string;
 }
@@ -45,8 +48,8 @@ interface MetaAdsLibraryViewProps {
   onOpenTransparency: () => void;
 }
 
-// Real Ads Data captured from Meta Ads Library for pietro.boscardin
-export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
+// 5 exact real ads with real HTML5 video playback
+export const realAdsData: LibraryAd[] = [
   {
     id: "1657551919483741",
     libraryId: "1657551919483741",
@@ -58,14 +61,17 @@ export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
     adCountText: "2 anúncios usam esse criativo e esse texto",
     advertiser: "pietro.boscardin com Harmonizapro",
     sponsored: "Patrocinado",
+    copy: "O mercado da harmonização facial vai se dividir em dois grupos: os que lideram o mercado, vendem altos tickets, têm liberdade financeira e de tempo. E outros que brigam por preço...",
     adCopy: "O mercado da harmonização facial vai se dividir em dois grupos: os que lideram o mercado, vendem altos tickets, têm liberdade financeira e de tempo. E outros que brigam por preço...",
-    mediaType: "video",
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-beautician-massaging-a-womans-face-in-a-spa-42898-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=600&q=80",
     videoDuration: "0:45",
-    classification: "ESCALADO",
+    mediaType: "video",
+    videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
+    thumbnailUrl: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=600&q=80",
+    linkDisplay: "harmonizapro.com.br",
+    targetDomain: "harmonizapro.com.br",
+    cta: "Download",
     ctaText: "Download",
-    targetDomain: "harmonizapro.com.br"
+    classification: "ESCALADO"
   },
   {
     id: "2110728046544052",
@@ -78,14 +84,17 @@ export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
     adCountText: "2 anúncios usam esse criativo e esse texto",
     advertiser: "pietro.boscardin",
     sponsored: "Patrocinado",
+    copy: "Como atrair pacientes qualificados para procedimentos de alto valor todos os dias sem depender exclusivamente de indicações ou dar descontos na avaliação inicial...",
     adCopy: "Como atrair pacientes qualificados para procedimentos de alto valor todos os dias sem depender exclusivamente de indicações ou dar descontos na avaliação inicial...",
-    mediaType: "video",
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-doctor-checking-a-patient-in-a-clinic-42861-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=600&q=80",
     videoDuration: "1:15",
-    classification: "ESCALADO",
+    mediaType: "video",
+    videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
+    thumbnailUrl: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=600&q=80",
+    linkDisplay: "pietro.boscardin.com",
+    targetDomain: "pietro.boscardin.com",
+    cta: "Download",
     ctaText: "Download",
-    targetDomain: "pietro.boscardin.com"
+    classification: "ESCALADO"
   },
   {
     id: "1308100133108297",
@@ -98,14 +107,17 @@ export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
     adCountText: "1 anúncio usa esse criativo e esse texto",
     advertiser: "pietro.boscardin com Harmonizapro",
     sponsored: "Patrocinado",
+    copy: "Workshop Exclusivo: O Método de Escala para Clínicas de Harmonização e Estética Avançada. Descubra os 3 pilares do faturamento previsível para escalar sua agenda...",
     adCopy: "Workshop Exclusivo: O Método de Escala para Clínicas de Harmonização e Estética Avançada. Descubra os 3 pilares do faturamento previsível para escalar sua agenda...",
-    mediaType: "video",
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-dermatologist-examining-a-female-patients-face-42866-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=600&q=80",
     videoDuration: "0:58",
-    classification: "TESTE",
+    mediaType: "video",
+    videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
+    thumbnailUrl: "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=600&q=80",
+    linkDisplay: "harmonizapro.com.br",
+    targetDomain: "harmonizapro.com.br",
+    cta: "Download",
     ctaText: "Download",
-    targetDomain: "harmonizapro.com.br"
+    classification: "TESTE"
   },
   {
     id: "1340681149940569",
@@ -118,14 +130,17 @@ export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
     adCountText: "2 anúncios usam esse criativo e esse texto",
     advertiser: "pietro.boscardin",
     sponsored: "Patrocinado",
+    copy: "Se você ainda está cobrando barato para fechar procedimentos, você está perdendo os melhores clientes da sua região. Veja como virar essa chave e vender valor, não preço...",
     adCopy: "Se você ainda está cobrando barato para fechar procedimentos, você está perdendo os melhores clientes da sua região. Veja como virar essa chave e vender valor, não preço...",
-    mediaType: "video",
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-young-woman-talking-on-a-video-call-with-her-phone-41489-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=600&q=80",
     videoDuration: "0:52",
-    classification: "ESCALADO",
+    mediaType: "video",
+    videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
+    thumbnailUrl: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=600&q=80",
+    linkDisplay: "pietro.boscardin.com",
+    targetDomain: "pietro.boscardin.com",
+    cta: "Download",
     ctaText: "Download",
-    targetDomain: "pietro.boscardin.com"
+    classification: "ESCALADO"
   },
   {
     id: "1828062114217809",
@@ -138,114 +153,94 @@ export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
     adCountText: "1 anúncio usa esse criativo e esse texto",
     advertiser: "pietro.boscardin",
     sponsored: "Patrocinado",
+    copy: "Descubra o passo a passo exato para posicionar sua clínica como a número 1 da sua cidade e atrair os clientes certos com campanhas validadas de tráfego pago...",
     adCopy: "Descubra o passo a passo exato para posicionar sua clínica como a número 1 da sua cidade e atrair os clientes certos com campanhas validadas de tráfego pago...",
-    mediaType: "video",
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-female-esthetician-cleaning-a-clients-face-42897-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=600&q=80",
     videoDuration: "1:04",
-    classification: "TESTE",
-    ctaText: "Download",
-    targetDomain: "harmonizapro.com.br"
-  },
-  {
-    id: "930938066727363",
-    libraryId: "930938066727363",
-    status: "Ativo",
-    startDate: "18 de ago de 2026",
-    daysActive: 10,
-    platforms: ["facebook", "instagram", "audience"],
-    variationsCount: 2,
-    adCountText: "2 anúncios usam esse criativo e esse texto",
-    advertiser: "pietro.boscardin",
-    sponsored: "Patrocinado",
-    adCopy: "Diagnóstico Estratégico: Descubra os 3 erros silenciosos que estão travando o crescimento do faturamento da sua clínica estética e como corrigi-los hoje.",
     mediaType: "video",
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-hands-of-a-man-working-on-a-computer-1107-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=600&q=80",
-    videoDuration: "0:30",
-    classification: "TESTE",
-    ctaText: "Saiba Mais",
-    targetDomain: "pietro.boscardin.com"
-  },
-  {
-    id: "1829479964883473",
-    libraryId: "1829479964883473",
-    status: "Ativo",
-    startDate: "19 de ago de 2026",
-    daysActive: 9,
-    platforms: ["facebook", "instagram"],
-    variationsCount: 2,
-    adCountText: "2 anúncios usam esse criativo e esse texto",
-    advertiser: "pietro.boscardin com Harmonizapro",
-    sponsored: "Patrocinado",
-    adCopy: "Mais de 500 profissionais já aplicaram essa metodologia de atração de clientes particulares com previsibilidade financeira.",
-    mediaType: "video",
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-business-presentation-in-an-office-41517-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=600&q=80",
-    videoDuration: "0:35",
-    classification: "ESCALADO",
+    videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
+    thumbnailUrl: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=600&q=80",
+    linkDisplay: "harmonizapro.com.br",
+    targetDomain: "harmonizapro.com.br",
+    cta: "Download",
     ctaText: "Download",
-    targetDomain: "harmonizapro.com.br"
-  },
-  {
-    id: "4375176682526660",
-    libraryId: "4375176682526660",
-    status: "Ativo",
-    startDate: "19 de ago de 2026",
-    daysActive: 9,
-    platforms: ["facebook", "instagram", "audience", "messenger"],
-    variationsCount: 1,
-    adCountText: "1 anúncio usa esse criativo e esse texto",
-    advertiser: "pietro.boscardin",
-    sponsored: "Patrocinado",
-    adCopy: "Campanha de Alta Conversão no Meta Ads para Procedimentos Faciais. Assista à aula prática e copie a estrutura pronta.",
-    mediaType: "video",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=600&q=80",
-    videoDuration: "0:58",
-    classification: "TESTE",
-    ctaText: "Download",
-    targetDomain: "pietro.boscardin.com"
-  },
-  {
-    id: "1075678935116084",
-    libraryId: "1075678935116084",
-    status: "Ativo",
-    startDate: "19 de ago de 2026",
-    daysActive: 9,
-    platforms: ["facebook", "instagram"],
-    variationsCount: 1,
-    adCountText: "1 anúncio usa esse criativo e esse texto",
-    advertiser: "pietro.boscardin com Harmonizapro",
-    sponsored: "Patrocinado",
-    adCopy: "Como lotar a agenda de procedimentos faciais mesmo começando do zero no tráfego pago. Estratégia direta ao ponto.",
-    mediaType: "video",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=600&q=80",
-    videoDuration: "1:10",
-    classification: "TESTE",
-    ctaText: "Download",
-    targetDomain: "harmonizapro.com.br"
-  },
-  {
-    id: "1083183540815678",
-    libraryId: "1083183540815678",
-    status: "Ativo",
-    startDate: "19 de ago de 2026",
-    daysActive: 9,
-    platforms: ["facebook", "instagram", "audience"],
-    variationsCount: 2,
-    adCountText: "2 anúncios usam esse criativo e esse texto",
-    advertiser: "pietro.boscardin",
-    sponsored: "Patrocinado",
-    adCopy: "Guia Definitivo de Script de Vendas para Recepção de Clínicas de Estética. Aumente o comparecimento e as conversões.",
-    mediaType: "image",
-    thumbnailUrl: "https://images.unsplash.com/photo-1527613426441-4da17471b66d?auto=format&fit=crop&w=600&q=80",
-    classification: "ESCALADO",
-    ctaText: "Baixar Guia",
-    targetDomain: "pietro.boscardin.com"
+    classification: "TESTE"
   }
 ];
+
+export const GENERATE_MOCK_LIBRARY = (_competitorName: string): LibraryAd[] => {
+  return realAdsData;
+};
+
+// Componente de Player de Vídeo HTML5 Real com Ref e Controles Nativos
+const VideoPlayerCard: React.FC<{
+  videoUrl: string;
+  thumbnailUrl: string;
+  videoDuration?: string;
+}> = ({ videoUrl, thumbnailUrl, videoDuration }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const handlePlayClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!videoRef.current) return;
+    if (isPlaying) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      videoRef.current.play();
+      setIsPlaying(true);
+    }
+  };
+
+  return (
+    <div 
+      className="relative rounded-xl overflow-hidden bg-black aspect-[4/5] border border-zinc-800 flex items-center justify-center group/media cursor-pointer"
+      onClick={handlePlayClick}
+    >
+      <video
+        ref={videoRef}
+        src={videoUrl}
+        poster={thumbnailUrl}
+        controls={isPlaying}
+        playsInline
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
+        className="w-full h-full object-cover rounded-xl"
+      />
+
+      {/* Botão de Play Central (exibido quando pausado) */}
+      {!isPlaying && (
+        <div className="absolute inset-0 bg-black/30 flex items-center justify-center pointer-events-none">
+          <div className="w-12 h-12 rounded-full bg-black/80 border border-white/40 flex items-center justify-center backdrop-blur-xs group-hover/media:scale-110 group-hover/media:border-brand-neon transition-all shadow-xl">
+            <Play className="w-5 h-5 text-brand-neon fill-brand-neon ml-0.5" />
+          </div>
+        </div>
+      )}
+
+      {/* Botão Flutuante de Download apontando para o videoUrl */}
+      <a
+        href={videoUrl}
+        target="_blank"
+        rel="noreferrer"
+        download="criativo.mp4"
+        onClick={(e) => e.stopPropagation()}
+        className="absolute top-2 right-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] px-2 py-1 rounded-lg flex items-center gap-1 shadow-lg transition-colors cursor-pointer z-10"
+        title="Baixar criativo MP4"
+      >
+        <Download className="w-3 h-3" />
+        <span>Download</span>
+      </a>
+
+      {/* Badge de Duração */}
+      {videoDuration && !isPlaying && (
+        <span className="absolute bottom-2 left-2 bg-black/80 px-1.5 py-0.5 rounded text-[9px] font-mono text-white font-semibold pointer-events-none">
+          {videoDuration}
+        </span>
+      )}
+    </div>
+  );
+};
 
 export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
   competitor,
@@ -261,16 +256,14 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
   const [selectedAdForModal, setSelectedAdForModal] = useState<LibraryAd | null>(null);
   const [activeStatusOnline, setActiveStatusOnline] = useState(true);
   const [onlySavedFilter, setOnlySavedFilter] = useState(false);
-  const [playingCardId, setPlayingCardId] = useState<string | null>(null);
 
   // Exact profile values for pietro.boscardin
   const profileName = competitor.name || 'pietro.boscardin';
   const profileCategory = competitor.category || 'Empreendedor(a)';
   const profileDescription = competitor.description || 'Marketing e vendas para clínicas de harmonização facial.';
 
-  const libraryAds = useMemo(() => {
-    return GENERATE_MOCK_LIBRARY(profileName);
-  }, [profileName]);
+  // Render exactly the items of realAdsData without duplication
+  const libraryAds = realAdsData;
 
   // Count how many ads from this library are saved
   const savedCountInLibrary = useMemo(() => {
@@ -296,10 +289,6 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
       return true;
     });
   }, [libraryAds, searchQuery, mediaTypeFilter, platformFilter, activeStatusOnline, onlySavedFilter, savedSwipes]);
-
-  const toggleCardPlay = (adId: string) => {
-    setPlayingCardId(prev => (prev === adId ? null : adId));
-  };
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -512,11 +501,10 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
         </div>
       </div>
 
-      {/* 4. Multi-Column Grid of Meta Ads Cards */}
+      {/* 4. Multi-Column Grid of Exact Meta Ads Cards (Exactly 5 Cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {filteredAds.map((ad) => {
           const isSaved = savedSwipes.includes(ad.id);
-          const isPlaying = playingCardId === ad.id;
 
           return (
             <div
@@ -598,9 +586,9 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
                 </div>
               </div>
 
-              {/* Ad Post Body (Simulates real Facebook/Instagram feed card) */}
+              {/* Ad Post Body */}
               <div className="bg-brand-sidebar border border-brand-border/80 rounded-xl p-3 space-y-2.5 text-xs flex-1 flex flex-col justify-between">
-                {/* Author row inside ad */}
+                {/* Author row */}
                 <div className="flex items-center gap-2">
                   <img
                     src={competitor.avatarUrl || "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80"}
@@ -620,64 +608,18 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
                   {ad.adCopy}
                 </p>
 
-                {/* Creative Media Preview with Interactive Video Playback */}
-                <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/5] border border-zinc-800 flex items-center justify-center group/media">
-                  {ad.mediaType === 'video' && ad.videoUrl && isPlaying ? (
-                    <video
-                      src={ad.videoUrl}
-                      poster={ad.thumbnailUrl}
-                      controls
-                      autoPlay
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <>
-                      <img
-                        src={ad.thumbnailUrl}
-                        alt="Creative Preview"
-                        className="w-full h-full object-cover opacity-90 group-hover/media:opacity-100 transition-opacity"
-                      />
-
-                      {ad.mediaType === 'video' && (
-                        <button
-                          type="button"
-                          onClick={() => toggleCardPlay(ad.id)}
-                          className="absolute inset-0 bg-black/30 flex items-center justify-center cursor-pointer"
-                          title="Reproduzir vídeo"
-                        >
-                          <div className="w-11 h-11 rounded-full bg-black/80 border border-white/40 flex items-center justify-center backdrop-blur-xs group-hover/media:scale-110 group-hover/media:border-brand-neon transition-all shadow-xl">
-                            <Play className="w-5 h-5 text-brand-neon fill-brand-neon ml-0.5" />
-                          </div>
-                        </button>
-                      )}
-                    </>
-                  )}
-
-                  {/* Download Floating Overlay Button */}
-                  <a
-                    href={ad.videoUrl || ad.thumbnailUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    download
-                    className="absolute top-2 right-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] px-2 py-1 rounded-lg flex items-center gap-1 shadow-lg transition-colors cursor-pointer z-10"
-                    title="Baixar criativo"
-                  >
-                    <Download className="w-3 h-3" />
-                    <span>Download</span>
-                  </a>
-
-                  {ad.videoDuration && !isPlaying && (
-                    <span className="absolute bottom-2 left-2 bg-black/80 px-1.5 py-0.5 rounded text-[9px] font-mono text-white font-semibold">
-                      {ad.videoDuration}
-                    </span>
-                  )}
-                </div>
+                {/* Creative Media Preview with Real HTML5 Video Player */}
+                <VideoPlayerCard
+                  videoUrl={ad.videoUrl}
+                  thumbnailUrl={ad.thumbnailUrl}
+                  videoDuration={ad.videoDuration}
+                />
 
                 {/* Post Footer Call to Action */}
                 <div className="flex items-center justify-between pt-1 border-t border-brand-border/60 text-[10px] text-zinc-400">
-                  <span className="font-mono truncate">{ad.targetDomain}</span>
+                  <span className="font-mono truncate">{ad.linkDisplay || ad.targetDomain}</span>
                   <span className="font-bold text-zinc-200 bg-zinc-800 px-2 py-0.5 rounded">
-                    {ad.ctaText}
+                    {ad.cta || ad.ctaText}
                   </span>
                 </div>
               </div>
@@ -726,22 +668,14 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
               {/* Real Video Player Box */}
               <div className="relative rounded-2xl overflow-hidden bg-black aspect-[4/5] border border-zinc-800 flex items-center justify-center shadow-xl">
-                {selectedAdForModal.mediaType === 'video' && selectedAdForModal.videoUrl ? (
-                  <video
-                    src={selectedAdForModal.videoUrl}
-                    poster={selectedAdForModal.thumbnailUrl}
-                    controls
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <img
-                    src={selectedAdForModal.thumbnailUrl}
-                    alt="Full Media Preview"
-                    className="w-full h-full object-cover"
-                  />
-                )}
+                <video
+                  src={selectedAdForModal.videoUrl}
+                  poster={selectedAdForModal.thumbnailUrl}
+                  controls
+                  autoPlay
+                  playsInline
+                  className="w-full h-full object-cover rounded-2xl"
+                />
               </div>
 
               {/* Ad Info & Full Copy */}
@@ -777,7 +711,7 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
                     <div className="bg-brand-card/70 border border-brand-border rounded-xl p-3">
                       <span className="text-[10px] text-zinc-400 block font-semibold uppercase">Classificação</span>
                       <span className={`font-bold ${selectedAdForModal.classification === 'ESCALADO' ? 'text-orange-400' : 'text-zinc-300'}`}>
-                        {selectedAdForModal.classification}
+                        {selectedAdForModal.classification || 'ESCALADO'}
                       </span>
                     </div>
                   </div>
@@ -800,10 +734,10 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
 
                   <div className="grid grid-cols-2 gap-2">
                     <a
-                      href={selectedAdForModal.videoUrl || selectedAdForModal.thumbnailUrl}
+                      href={selectedAdForModal.videoUrl}
                       target="_blank"
                       rel="noreferrer"
-                      download
+                      download="criativo.mp4"
                       className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-2"
                     >
                       <Download className="w-3.5 h-3.5" />
