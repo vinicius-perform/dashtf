@@ -20,6 +20,7 @@ interface DateRangePickerProps {
   value: DateRange;
   onChange: (range: DateRange) => void;
   timezone?: string;
+  align?: 'left' | 'right';
 }
 
 const PRESET_TABS = [
@@ -37,7 +38,12 @@ const MONTH_NAMES = [
 
 const WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
 
-export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChange, timezone = 'America/Sao_Paulo' }) => {
+export const DateRangePicker: React.FC<DateRangePickerProps> = ({ 
+  value, 
+  onChange, 
+  timezone = 'America/Sao_Paulo',
+  align = 'left'
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [tempStart, setTempStart] = useState<string | null>(null);
   
@@ -215,7 +221,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChang
   const nextMonthYear = startMonth === 11 ? startYear + 1 : startYear;
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className={`relative ${isOpen ? 'z-40' : ''}`} ref={containerRef}>
       {/* Date Range Trigger Pill */}
       <button
         onClick={() => setIsOpen(!isOpen)}
@@ -229,9 +235,9 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ value, onChang
         <span>{value.label}</span>
       </button>
 
-      {/* Popover Calendar (Positioned with right-0 to prevent right-edge overflow) */}
+      {/* Popover Calendar (Positioned with left-0 / align and z-[100] to expand rightward and float above sidebar) */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 bg-[#121214] border border-brand-border rounded-2xl shadow-2xl z-50 p-5 w-[540px] max-w-[90vw] space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-full mt-2 bg-[#121214] border border-brand-border rounded-2xl shadow-2xl z-[100] p-5 w-[540px] max-w-[90vw] space-y-4 animate-in fade-in zoom-in-95 duration-150`}>
           {/* Top Horizontal Preset Tabs */}
           <div className="flex items-center gap-6 text-xs font-semibold text-zinc-400 border-b border-brand-border/60 pb-3 px-1 overflow-x-auto">
             {PRESET_TABS.map((preset) => {

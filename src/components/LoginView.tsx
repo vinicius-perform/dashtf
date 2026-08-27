@@ -8,9 +8,8 @@ interface LoginViewProps {
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
-  // Pre-filled dev credentials as requested in instructions
-  const [email, setEmail] = useState('viniciusmarinhods@gmail.com');
-  const [password, setPassword] = useState('admin@FA1');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

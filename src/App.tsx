@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { GerenciadorView } from './components/GerenciadorView';
+import { MiningView } from './components/MiningView';
 import { IntegrationsView } from './components/IntegrationsView';
 import { CrmLeadsView } from './components/CrmLeadsView';
 import { CreativesView } from './components/CreativesView';
@@ -46,7 +47,7 @@ export function App() {
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'gerenciador' | 'leads' | 'criativos' | 'integracoes'>('gerenciador');
+  const [activeTab, setActiveTab] = useState<'gerenciador' | 'mineracao' | 'leads' | 'criativos' | 'integracoes'>('gerenciador');
   const [activeLevel, setActiveLevel] = useState<string>('campanhas');
   const [metaConfig, setMetaConfig] = useState<MetaConfig>(getSavedMetaConfig());
   const [accounts, setAccounts] = useState<MetaAdAccount[]>([]);
@@ -321,6 +322,10 @@ export function App() {
               onToggleCampaignStatus={handleToggleCampaignStatus}
               isLoading={isLoading}
             />
+          )}
+
+          {activeTab === 'mineracao' && (
+            <MiningView />
           )}
 
           {activeTab === 'leads' && (
