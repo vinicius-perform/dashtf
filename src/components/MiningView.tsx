@@ -98,9 +98,21 @@ export const MiningView: React.FC = () => {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-      return [];
+      return [
+        {
+          id: 'folder-pietro-boscardin',
+          competitor: DEFAULT_SAMPLE_COMPETITOR,
+          addedAt: new Date().toLocaleDateString('pt-BR')
+        }
+      ];
     } catch {
-      return [];
+      return [
+        {
+          id: 'folder-pietro-boscardin',
+          competitor: DEFAULT_SAMPLE_COMPETITOR,
+          addedAt: new Date().toLocaleDateString('pt-BR')
+        }
+      ];
     }
   });
 

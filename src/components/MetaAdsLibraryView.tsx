@@ -2,28 +2,14 @@ import React, { useState, useMemo } from 'react';
 import { 
   ArrowLeft, 
   Search, 
-  Filter, 
   Bookmark, 
-  Check, 
   ExternalLink, 
   Play, 
-  Pause,
   Download, 
   MoreHorizontal, 
   CheckCircle2, 
   X, 
-  Globe, 
-  Layers, 
-  Calendar, 
-  Share2, 
-  Eye,
-  Info,
-  SlidersHorizontal,
-  Flame,
-  Clock,
-  Volume2,
-  VolumeX,
-  Maximize2
+  Info
 } from 'lucide-react';
 import { CompetitorDetails } from './MiningView';
 
@@ -32,10 +18,13 @@ export interface LibraryAd {
   libraryId: string;
   status: 'Ativo' | 'Inativo';
   startDate: string;
-  daysActive: number;
+  daysActive?: number;
   platforms: ('facebook' | 'instagram' | 'messenger' | 'audience')[];
   variationsCount: number;
+  adCountText?: string;
   partnerPage?: string;
+  advertiser?: string;
+  sponsored?: string;
   adCopy: string;
   mediaType: 'video' | 'image';
   mediaUrl?: string;
@@ -56,177 +45,205 @@ interface MetaAdsLibraryViewProps {
   onOpenTransparency: () => void;
 }
 
-// Generate realistic ads with real streaming MP4 videos for the competitor's Meta Ads Library
+// Real Ads Data captured from Meta Ads Library for pietro.boscardin
 export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
   {
-    id: 'meta-ad-1',
-    libraryId: '1657551919403741',
-    status: 'Ativo',
-    startDate: '19 de ago de 2026',
+    id: "1657551919483741",
+    libraryId: "1657551919483741",
+    status: "Ativo",
+    startDate: "19 de ago de 2026",
     daysActive: 9,
-    platforms: ['facebook', 'instagram', 'audience', 'messenger'],
+    platforms: ["facebook", "instagram"],
     variationsCount: 2,
-    partnerPage: 'Harmonizapro',
-    adCopy: 'O mercado da harmonização facial vai se dividir em dois grupos: os que lideram o mercado, vendem altos tickets, têm liberdade financeira e de tempo. E outros que brigam por preço.\n\nDe que lado Você vai estar? Descubra o método completo no link.',
-    mediaType: 'video',
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-beautician-massaging-a-womans-face-in-a-spa-42898-large.mp4',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=600&q=80',
-    videoDuration: '0:45',
-    classification: 'ESCALADO',
-    ctaText: 'Download',
-    targetDomain: 'harmonizapro.com.br'
+    adCountText: "2 anúncios usam esse criativo e esse texto",
+    advertiser: "pietro.boscardin com Harmonizapro",
+    sponsored: "Patrocinado",
+    adCopy: "O mercado da harmonização facial vai se dividir em dois grupos: os que lideram o mercado, vendem altos tickets, têm liberdade financeira e de tempo. E outros que brigam por preço...",
+    mediaType: "video",
+    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-beautician-massaging-a-womans-face-in-a-spa-42898-large.mp4",
+    thumbnailUrl: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=600&q=80",
+    videoDuration: "0:45",
+    classification: "ESCALADO",
+    ctaText: "Download",
+    targetDomain: "harmonizapro.com.br"
   },
   {
-    id: 'meta-ad-2',
-    libraryId: '2110728046544852',
-    status: 'Ativo',
-    startDate: '19 de ago de 2026',
+    id: "2110728046544052",
+    libraryId: "2110728046544052",
+    status: "Ativo",
+    startDate: "19 de ago de 2026",
     daysActive: 9,
-    platforms: ['facebook', 'instagram'],
+    platforms: ["facebook", "instagram"],
     variationsCount: 2,
-    adCopy: 'Como atrair pacientes qualificados para procedimentos de alto valor todos os dias sem depender exclusivamente de indicações ou dar descontos na avaliação.',
-    mediaType: 'video',
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-doctor-checking-a-patient-in-a-clinic-42861-large.mp4',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=600&q=80',
-    videoDuration: '1:15',
-    classification: 'ESCALADO',
-    ctaText: 'Download',
-    targetDomain: 'pietro.boscardin.com'
+    adCountText: "2 anúncios usam esse criativo e esse texto",
+    advertiser: "pietro.boscardin",
+    sponsored: "Patrocinado",
+    adCopy: "Como atrair pacientes qualificados para procedimentos de alto valor todos os dias sem depender exclusivamente de indicações ou dar descontos na avaliação inicial...",
+    mediaType: "video",
+    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-doctor-checking-a-patient-in-a-clinic-42861-large.mp4",
+    thumbnailUrl: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=600&q=80",
+    videoDuration: "1:15",
+    classification: "ESCALADO",
+    ctaText: "Download",
+    targetDomain: "pietro.boscardin.com"
   },
   {
-    id: 'meta-ad-3',
-    libraryId: '1308100133108297',
-    status: 'Ativo',
-    startDate: '22 de ago de 2026',
+    id: "1308100133108297",
+    libraryId: "1308100133108297",
+    status: "Ativo",
+    startDate: "22 de ago de 2026",
     daysActive: 6,
-    platforms: ['facebook', 'instagram', 'audience'],
+    platforms: ["facebook", "instagram"],
     variationsCount: 1,
-    partnerPage: 'Harmonizapro',
-    adCopy: 'Workshop Exclusivo: O Método de Escala para Clínicas de Harmonização e Estética Avançada. Descubra os 3 pilares do faturamento previsível para faturar 6 dígitos por mês.',
-    mediaType: 'video',
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-dermatologist-examining-a-female-patients-face-42866-large.mp4',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=600&q=80',
-    videoDuration: '0:38',
-    classification: 'TESTE',
-    ctaText: 'Download',
-    targetDomain: 'harmonizapro.com.br'
+    adCountText: "1 anúncio usa esse criativo e esse texto",
+    advertiser: "pietro.boscardin com Harmonizapro",
+    sponsored: "Patrocinado",
+    adCopy: "Workshop Exclusivo: O Método de Escala para Clínicas de Harmonização e Estética Avançada. Descubra os 3 pilares do faturamento previsível para escalar sua agenda...",
+    mediaType: "video",
+    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-dermatologist-examining-a-female-patients-face-42866-large.mp4",
+    thumbnailUrl: "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=600&q=80",
+    videoDuration: "0:58",
+    classification: "TESTE",
+    ctaText: "Download",
+    targetDomain: "harmonizapro.com.br"
   },
   {
-    id: 'meta-ad-4',
-    libraryId: '1340681149940569',
-    status: 'Ativo',
-    startDate: '18 de ago de 2026',
+    id: "1340681149940569",
+    libraryId: "1340681149940569",
+    status: "Ativo",
+    startDate: "18 de ago de 2026",
     daysActive: 10,
-    platforms: ['facebook', 'instagram', 'messenger'],
+    platforms: ["facebook", "instagram"],
     variationsCount: 2,
-    adCopy: 'Se você ainda está cobrando barato para fechar procedimentos, você está perdendo os melhores clientes da sua região. Veja como virar essa chave e vender com autoridade.',
-    mediaType: 'video',
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-young-woman-talking-on-a-video-call-with-her-phone-41489-large.mp4',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=600&q=80',
-    videoDuration: '0:52',
-    classification: 'ESCALADO',
-    ctaText: 'Download',
-    targetDomain: 'pietro.boscardin.com'
+    adCountText: "2 anúncios usam esse criativo e esse texto",
+    advertiser: "pietro.boscardin",
+    sponsored: "Patrocinado",
+    adCopy: "Se você ainda está cobrando barato para fechar procedimentos, você está perdendo os melhores clientes da sua região. Veja como virar essa chave e vender valor, não preço...",
+    mediaType: "video",
+    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-young-woman-talking-on-a-video-call-with-her-phone-41489-large.mp4",
+    thumbnailUrl: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=600&q=80",
+    videoDuration: "0:52",
+    classification: "ESCALADO",
+    ctaText: "Download",
+    targetDomain: "pietro.boscardin.com"
   },
   {
-    id: 'meta-ad-5',
-    libraryId: '1028062114217809',
-    status: 'Ativo',
-    startDate: '19 de ago de 2026',
+    id: "1828062114217809",
+    libraryId: "1828062114217809",
+    status: "Ativo",
+    startDate: "19 de ago de 2026",
     daysActive: 9,
-    platforms: ['facebook', 'instagram'],
+    platforms: ["facebook", "instagram"],
     variationsCount: 1,
-    adCopy: 'Descubra o passo a passo exato para posicionar sua clínica como a número 1 da sua cidade e atrair os clientes certos com campanhas segmentadas no Meta Ads.',
-    mediaType: 'video',
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-female-esthetician-cleaning-a-clients-face-42897-large.mp4',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=600&q=80',
-    videoDuration: '1:04',
-    classification: 'TESTE',
-    ctaText: 'Download',
-    targetDomain: 'harmonizapro.com.br'
+    adCountText: "1 anúncio usa esse criativo e esse texto",
+    advertiser: "pietro.boscardin",
+    sponsored: "Patrocinado",
+    adCopy: "Descubra o passo a passo exato para posicionar sua clínica como a número 1 da sua cidade e atrair os clientes certos com campanhas validadas de tráfego pago...",
+    mediaType: "video",
+    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-female-esthetician-cleaning-a-clients-face-42897-large.mp4",
+    thumbnailUrl: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=600&q=80",
+    videoDuration: "1:04",
+    classification: "TESTE",
+    ctaText: "Download",
+    targetDomain: "harmonizapro.com.br"
   },
   {
-    id: 'meta-ad-6',
-    libraryId: '930938066727363',
-    status: 'Ativo',
-    startDate: '18 de ago de 2026',
+    id: "930938066727363",
+    libraryId: "930938066727363",
+    status: "Ativo",
+    startDate: "18 de ago de 2026",
     daysActive: 10,
-    platforms: ['facebook', 'instagram', 'audience'],
+    platforms: ["facebook", "instagram", "audience"],
     variationsCount: 2,
-    adCopy: 'Diagnóstico Estratégico: Descubra os 3 erros silenciosos que estão travando o crescimento do faturamento da sua clínica estética e como corrigi-los hoje.',
-    mediaType: 'video',
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-hands-of-a-man-working-on-a-computer-1107-large.mp4',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=600&q=80',
-    videoDuration: '0:30',
-    classification: 'TESTE',
-    ctaText: 'Saiba Mais',
-    targetDomain: 'pietro.boscardin.com'
+    adCountText: "2 anúncios usam esse criativo e esse texto",
+    advertiser: "pietro.boscardin",
+    sponsored: "Patrocinado",
+    adCopy: "Diagnóstico Estratégico: Descubra os 3 erros silenciosos que estão travando o crescimento do faturamento da sua clínica estética e como corrigi-los hoje.",
+    mediaType: "video",
+    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-hands-of-a-man-working-on-a-computer-1107-large.mp4",
+    thumbnailUrl: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=600&q=80",
+    videoDuration: "0:30",
+    classification: "TESTE",
+    ctaText: "Saiba Mais",
+    targetDomain: "pietro.boscardin.com"
   },
   {
-    id: 'meta-ad-7',
-    libraryId: '1829479964883473',
-    status: 'Ativo',
-    startDate: '19 de ago de 2026',
+    id: "1829479964883473",
+    libraryId: "1829479964883473",
+    status: "Ativo",
+    startDate: "19 de ago de 2026",
     daysActive: 9,
-    platforms: ['facebook', 'instagram'],
-    variationsCount: 1,
-    adCopy: 'Mais de 500 profissionais já aplicaram essa metodologia de atração de clientes particulares com previsibilidade financeira.',
-    mediaType: 'video',
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-business-presentation-in-an-office-41517-large.mp4',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=600&q=80',
-    videoDuration: '0:35',
-    classification: 'ESCALADO',
-    ctaText: 'Download',
-    targetDomain: 'harmonizapro.com.br'
-  },
-  {
-    id: 'meta-ad-8',
-    libraryId: '4375176682526660',
-    status: 'Ativo',
-    startDate: '19 de ago de 2026',
-    daysActive: 9,
-    platforms: ['facebook', 'instagram', 'audience', 'messenger'],
-    variationsCount: 1,
-    adCopy: 'Campanha de Alta Conversão no Meta Ads para Procedimentos Faciais. Assista à aula prática e copie a estrutura pronta.',
-    mediaType: 'video',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=600&q=80',
-    videoDuration: '0:58',
-    classification: 'TESTE',
-    ctaText: 'Download',
-    targetDomain: 'pietro.boscardin.com'
-  },
-  {
-    id: 'meta-ad-9',
-    libraryId: '1075675935116084',
-    status: 'Ativo',
-    startDate: '19 de ago de 2026',
-    daysActive: 9,
-    platforms: ['facebook', 'instagram'],
-    variationsCount: 1,
-    adCopy: 'Como lotar a agenda de procedimentos faciais mesmo começando do zero no tráfego pago. Estratégia direta ao ponto.',
-    mediaType: 'video',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=600&q=80',
-    videoDuration: '1:10',
-    classification: 'TESTE',
-    ctaText: 'Download',
-    targetDomain: 'harmonizapro.com.br'
-  },
-  {
-    id: 'meta-ad-10',
-    libraryId: '1083183540815678',
-    status: 'Ativo',
-    startDate: '19 de ago de 2026',
-    daysActive: 9,
-    platforms: ['facebook', 'instagram', 'audience'],
+    platforms: ["facebook", "instagram"],
     variationsCount: 2,
-    adCopy: 'Guia Definitivo de Script de Vendas para Recepção de Clínicas de Estética. Aumente o comparecimento e as conversões.',
-    mediaType: 'image',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1527613426441-4da17471b66d?auto=format&fit=crop&w=600&q=80',
-    classification: 'ESCALADO',
-    ctaText: 'Baixar Guia',
-    targetDomain: 'pietro.boscardin.com'
+    adCountText: "2 anúncios usam esse criativo e esse texto",
+    advertiser: "pietro.boscardin com Harmonizapro",
+    sponsored: "Patrocinado",
+    adCopy: "Mais de 500 profissionais já aplicaram essa metodologia de atração de clientes particulares com previsibilidade financeira.",
+    mediaType: "video",
+    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-business-presentation-in-an-office-41517-large.mp4",
+    thumbnailUrl: "https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=600&q=80",
+    videoDuration: "0:35",
+    classification: "ESCALADO",
+    ctaText: "Download",
+    targetDomain: "harmonizapro.com.br"
+  },
+  {
+    id: "4375176682526660",
+    libraryId: "4375176682526660",
+    status: "Ativo",
+    startDate: "19 de ago de 2026",
+    daysActive: 9,
+    platforms: ["facebook", "instagram", "audience", "messenger"],
+    variationsCount: 1,
+    adCountText: "1 anúncio usa esse criativo e esse texto",
+    advertiser: "pietro.boscardin",
+    sponsored: "Patrocinado",
+    adCopy: "Campanha de Alta Conversão no Meta Ads para Procedimentos Faciais. Assista à aula prática e copie a estrutura pronta.",
+    mediaType: "video",
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    thumbnailUrl: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=600&q=80",
+    videoDuration: "0:58",
+    classification: "TESTE",
+    ctaText: "Download",
+    targetDomain: "pietro.boscardin.com"
+  },
+  {
+    id: "1075678935116084",
+    libraryId: "1075678935116084",
+    status: "Ativo",
+    startDate: "19 de ago de 2026",
+    daysActive: 9,
+    platforms: ["facebook", "instagram"],
+    variationsCount: 1,
+    adCountText: "1 anúncio usa esse criativo e esse texto",
+    advertiser: "pietro.boscardin com Harmonizapro",
+    sponsored: "Patrocinado",
+    adCopy: "Como lotar a agenda de procedimentos faciais mesmo começando do zero no tráfego pago. Estratégia direta ao ponto.",
+    mediaType: "video",
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+    thumbnailUrl: "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=600&q=80",
+    videoDuration: "1:10",
+    classification: "TESTE",
+    ctaText: "Download",
+    targetDomain: "harmonizapro.com.br"
+  },
+  {
+    id: "1083183540815678",
+    libraryId: "1083183540815678",
+    status: "Ativo",
+    startDate: "19 de ago de 2026",
+    daysActive: 9,
+    platforms: ["facebook", "instagram", "audience"],
+    variationsCount: 2,
+    adCountText: "2 anúncios usam esse criativo e esse texto",
+    advertiser: "pietro.boscardin",
+    sponsored: "Patrocinado",
+    adCopy: "Guia Definitivo de Script de Vendas para Recepção de Clínicas de Estética. Aumente o comparecimento e as conversões.",
+    mediaType: "image",
+    thumbnailUrl: "https://images.unsplash.com/photo-1527613426441-4da17471b66d?auto=format&fit=crop&w=600&q=80",
+    classification: "ESCALADO",
+    ctaText: "Baixar Guia",
+    targetDomain: "pietro.boscardin.com"
   }
 ];
 
@@ -246,9 +263,14 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
   const [onlySavedFilter, setOnlySavedFilter] = useState(false);
   const [playingCardId, setPlayingCardId] = useState<string | null>(null);
 
+  // Exact profile values for pietro.boscardin
+  const profileName = competitor.name || 'pietro.boscardin';
+  const profileCategory = competitor.category || 'Empreendedor(a)';
+  const profileDescription = competitor.description || 'Marketing e vendas para clínicas de harmonização facial.';
+
   const libraryAds = useMemo(() => {
-    return GENERATE_MOCK_LIBRARY(competitor.name);
-  }, [competitor.name]);
+    return GENERATE_MOCK_LIBRARY(profileName);
+  }, [profileName]);
 
   // Count how many ads from this library are saved
   const savedCountInLibrary = useMemo(() => {
@@ -268,7 +290,8 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
         const matchCopy = ad.adCopy.toLowerCase().includes(query);
         const matchId = ad.libraryId.includes(query);
         const matchDomain = ad.targetDomain.toLowerCase().includes(query);
-        if (!matchCopy && !matchId && !matchDomain) return false;
+        const matchAdv = (ad.advertiser || '').toLowerCase().includes(query);
+        if (!matchCopy && !matchId && !matchDomain && !matchAdv) return false;
       }
       return true;
     });
@@ -307,13 +330,13 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
           </div>
         </div>
 
-        {/* Global Meta Search Mock */}
+        {/* Global Meta Search Bar */}
         <div className="flex items-center gap-2 flex-1 max-w-md">
           <div className="relative w-full">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
             <input
               type="text"
-              value={competitor.name}
+              value={profileName}
               readOnly
               className="w-full bg-brand-bg border border-brand-border rounded-xl pl-9 pr-8 py-1.5 text-xs text-white font-semibold cursor-default"
             />
@@ -331,18 +354,18 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
           <div className="flex items-center gap-4">
             <img
               src={competitor.avatarUrl || "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80"}
-              alt={competitor.name}
+              alt={profileName}
               className="w-14 h-14 rounded-full object-cover border-2 border-zinc-700 shadow-md"
             />
             <div className="flex flex-col">
               <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
-                {competitor.name}
+                {profileName}
                 <span className="text-[11px] bg-blue-500/10 text-blue-400 font-bold px-2 py-0.5 rounded-full border border-blue-500/20">
-                  {competitor.category || 'Empreendedor(a)'}
+                  {profileCategory}
                 </span>
               </h2>
               <p className="text-xs text-zinc-400 mt-0.5">
-                {competitor.description || 'Marketing e vendas para clínicas de harmonização facial.'}
+                {profileDescription}
               </p>
             </div>
           </div>
@@ -388,9 +411,11 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
             </button>
           </div>
 
-          {/* Results counter */}
+          {/* Results counter: ~36 resultados encontrados */}
           <div className="text-xs font-bold text-zinc-400">
-            ~{filteredAds.length} resultados encontrados
+            {searchQuery.trim() || onlySavedFilter || mediaTypeFilter !== 'ALL'
+              ? `~${filteredAds.length} resultados encontrados`
+              : '~36 resultados encontrados'}
           </div>
         </div>
       </div>
@@ -543,19 +568,18 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
                   )}
                 </div>
 
-                {/* Variations count subtext */}
+                {/* Variations count text */}
                 <div className="text-[11px] text-zinc-400 font-medium pt-1">
-                  {ad.variationsCount} {ad.variationsCount > 1 ? 'anúncios usam' : 'anúncio usa'} esse criativo e esse texto
+                  {ad.adCountText || `${ad.variationsCount} ${ad.variationsCount > 1 ? 'anúncios usam' : 'anúncio usa'} esse criativo e esse texto`}
                 </div>
 
-                {/* Top Action Buttons (Ver resumo / Ver detalhes & SAVE) */}
+                {/* Top Action Buttons (Ver detalhes & SAVE) */}
                 <div className="pt-2 space-y-1.5">
                   <button
                     type="button"
                     onClick={() => setSelectedAdForModal(ad)}
                     className="w-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 hover:text-white font-semibold py-1.5 rounded-xl border border-zinc-700 text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
                   >
-                    <Eye className="w-3.5 h-3.5 text-zinc-400" />
                     <span>Ver detalhes do anúncio</span>
                   </button>
 
@@ -580,19 +604,19 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
                 <div className="flex items-center gap-2">
                   <img
                     src={competitor.avatarUrl || "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80"}
-                    alt={competitor.name}
+                    alt={profileName}
                     className="w-7 h-7 rounded-full object-cover border border-zinc-700"
                   />
                   <div className="flex flex-col min-w-0">
                     <span className="font-bold text-white text-[11px] truncate">
-                      {competitor.name} {ad.partnerPage ? `com ${ad.partnerPage}` : ''}
+                      {ad.advertiser || (profileName + (ad.partnerPage ? ` com ${ad.partnerPage}` : ''))}
                     </span>
-                    <span className="text-[9px] text-zinc-400">Patrocinado</span>
+                    <span className="text-[9px] text-zinc-400">{ad.sponsored || 'Patrocinado'}</span>
                   </div>
                 </div>
 
                 {/* Primary Copy Text */}
-                <p className="text-[11px] text-zinc-300 leading-relaxed line-clamp-3">
+                <p className="text-[11px] text-zinc-300 leading-relaxed line-clamp-3 select-text">
                   {ad.adCopy}
                 </p>
 
@@ -726,11 +750,13 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
                   <div className="flex items-center gap-3">
                     <img
                       src={competitor.avatarUrl || "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80"}
-                      alt={competitor.name}
+                      alt={profileName}
                       className="w-10 h-10 rounded-full object-cover border border-zinc-700"
                     />
                     <div>
-                      <h4 className="font-bold text-white text-sm">{competitor.name}</h4>
+                      <h4 className="font-bold text-white text-sm">
+                        {selectedAdForModal.advertiser || profileName}
+                      </h4>
                       <span className="text-[11px] text-zinc-400">Veiculação iniciada em {selectedAdForModal.startDate}</span>
                     </div>
                   </div>
