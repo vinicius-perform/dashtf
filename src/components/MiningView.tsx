@@ -18,9 +18,13 @@ import {
   FolderOpen, 
   ChevronRight, 
   Eye, 
-  Trash2
+  Trash2,
+  Loader2,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
-import { MetaAdsLibraryView, GENERATE_MOCK_LIBRARY } from './MetaAdsLibraryView';
+import { MetaAdsLibraryView } from './MetaAdsLibraryView';
+import { searchCompetitorAds, getSavedMetaConfig, ADMIN_META_TOKEN } from '../services/metaDataEngine';
 
 export interface CompetitorDetails {
   name: string;
@@ -88,7 +92,9 @@ export const InstagramIcon = () => (
 );
 
 export const MiningView: React.FC = () => {
-  const [urlInput, setUrlInput] = useState('');
+  const [searchUrl, setSearchUrl] = useState('');
+  const [isMining, setIsMining] = useState(false);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   
   // Persistent Competitor Folders loaded from localStorage
   const [competitorFolders, setCompetitorFolders] = useState<MonitoredCompetitorFolder[]>(() => {
@@ -188,26 +194,54 @@ export const MiningView: React.FC = () => {
     };
   }, [competitorFolders]);
 
-  // Handle URL Add (Creates client folder)
-  const handleAddMonitorUrl = (e: React.FormEvent) => {
+  // Handle URL Add & API Search (Mining Engine)
+  const handleMonitorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!urlInput.trim()) return;
+    if (!searchUrl.trim() || isMining) return;
 
-    const exists = competitorFolders.some(f => f.competitor.name.toLowerCase() === 'pietro.boscardin');
-    if (!exists) {
+    setIsMining(true);
+    setToast(null);
+
+    try {
+      const metaConfig = getSavedMetaConfig();
+      const token = metaConfig.accessToken || ADMIN_META_TOKEN;
+
+      const result = await searchCompetitorAds(searchUrl, token);
+
       const newFolder: MonitoredCompetitorFolder = {
-        id: `folder-${Date.now()}`,
+        id: `folder-${result.pageId}-${Date.now()}`,
         competitor: {
           ...DEFAULT_SAMPLE_COMPETITOR,
-          name: 'pietro.boscardin',
-          pageUrl: urlInput
+          name: result.pageName || 'pietro.boscardin',
+          facebookId: result.pageId,
+          category: result.category || 'Empreendedor(a)',
+          pageUrl: searchUrl
         },
         addedAt: new Date().toLocaleDateString('pt-BR')
       };
-      setCompetitorFolders(prev => [newFolder, ...prev]);
-    }
 
-    setUrlInput('');
+      setCompetitorFolders(prev => {
+        const exists = prev.some(f => f.competitor.facebookId === result.pageId);
+        if (exists) return prev;
+        return [newFolder, ...prev];
+      });
+
+      setToast({ 
+        type: 'success', 
+        message: `✓ Concorrente "${result.pageName}" adicionado com sucesso!` 
+      });
+      setSearchUrl('');
+      setTimeout(() => setToast(null), 4000);
+    } catch (err: any) {
+      console.error('Erro na mineração do concorrente:', err);
+      setToast({ 
+        type: 'error', 
+        message: 'Falha ao rastrear concorrente. Verifique o link e o token.' 
+      });
+      setTimeout(() => setToast(null), 5000);
+    } finally {
+      setIsMining(false);
+    }
   };
 
   // Toggle Save to Swipe File
@@ -253,29 +287,56 @@ export const MiningView: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6 max-w-[1700px] mx-auto animate-fadeIn relative">
-      {/* 1. Área de Input (Monitoramento) */}
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-5 right-5 z-50 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 border text-xs font-extrabold animate-bounce ${
+          toast.type === 'success' 
+            ? 'bg-brand-neon text-black border-black/20' 
+            : 'bg-rose-500 text-white border-rose-600'
+        }`}>
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+          ) : (
+            <AlertCircle className="w-4 h-4 stroke-[2.5]" />
+          )}
+          <span>{toast.message}</span>
+        </div>
+      )}
+
+      {/* 1. Área de Input (Monitoramento com Integração API) */}
       <div className="bg-brand-card/90 border border-brand-border rounded-2xl p-5 shadow-lg relative overflow-hidden backdrop-blur-sm">
         <div className="flex flex-col gap-2.5">
           <label className="text-xs font-bold text-zinc-300 flex items-center gap-2">
             <Sparkles className="w-3.5 h-3.5 text-brand-neon" />
             Adicionar URL da Biblioteca de Anúncios p/ Monitorar Cliente
           </label>
-          <form onSubmit={handleAddMonitorUrl} className="flex items-center gap-3">
+          <form onSubmit={handleMonitorSubmit} className="flex items-center gap-3">
             <div className="relative flex-1">
               <input
                 type="text"
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                placeholder="https://www.facebook.com/ads/library/?..."
-                className="w-full bg-brand-bg border border-brand-border rounded-xl px-4 py-2.5 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-brand-neon transition-all"
+                value={searchUrl}
+                onChange={(e) => setSearchUrl(e.target.value)}
+                placeholder="https://www.facebook.com/ads/library/?view_all_page_id=100242929476278"
+                disabled={isMining}
+                className="w-full bg-brand-bg border border-brand-border rounded-xl px-4 py-2.5 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-brand-neon transition-all disabled:opacity-50"
               />
             </div>
             <button
               type="submit"
-              className="bg-brand-neon hover:bg-brand-neonHover text-black font-bold text-xs px-6 py-2.5 rounded-xl shadow-md shadow-brand-neon/20 transition-all flex items-center gap-2 shrink-0 cursor-pointer active:scale-95"
+              disabled={!searchUrl.trim() || isMining}
+              className="bg-brand-neon hover:bg-brand-neonHover disabled:opacity-50 text-black font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md shadow-brand-neon/20 transition-all flex items-center gap-2 shrink-0 cursor-pointer active:scale-95"
             >
-              <Plus className="w-4 h-4 text-black stroke-[3]" />
-              <span>Monitorar Cliente</span>
+              {isMining ? (
+                <>
+                  <Loader2 className="w-4 h-4 text-black animate-spin" />
+                  <span>Minerando...</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 text-black stroke-[3]" />
+                  <span>Monitorar</span>
+                </>
+              )}
             </button>
           </form>
         </div>
