@@ -7,6 +7,7 @@ import {
   Check, 
   ExternalLink, 
   Play, 
+  Pause,
   Download, 
   MoreHorizontal, 
   CheckCircle2, 
@@ -19,7 +20,10 @@ import {
   Info,
   SlidersHorizontal,
   Flame,
-  Clock
+  Clock,
+  Volume2,
+  VolumeX,
+  Maximize2
 } from 'lucide-react';
 import { CompetitorDetails } from './MiningView';
 
@@ -35,6 +39,7 @@ export interface LibraryAd {
   adCopy: string;
   mediaType: 'video' | 'image';
   mediaUrl?: string;
+  videoUrl?: string;
   thumbnailUrl: string;
   videoDuration?: string;
   classification: 'ESCALADO' | 'TESTE';
@@ -51,7 +56,7 @@ interface MetaAdsLibraryViewProps {
   onOpenTransparency: () => void;
 }
 
-// Generate realistic ads for the competitor's Meta Ads Library
+// Generate realistic ads with real streaming MP4 videos for the competitor's Meta Ads Library
 export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
   {
     id: 'meta-ad-1',
@@ -62,8 +67,9 @@ export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
     platforms: ['facebook', 'instagram', 'audience', 'messenger'],
     variationsCount: 2,
     partnerPage: 'Harmonizapro',
-    adCopy: 'O mercado da harmonização facial vai se dividir em dois grupos: os que lideram o mercado, vendem altos tickets, têm liberdade financeira e de tempo. E outros que brigam por preço.\n\nDe que lado Você vai estar?',
+    adCopy: 'O mercado da harmonização facial vai se dividir em dois grupos: os que lideram o mercado, vendem altos tickets, têm liberdade financeira e de tempo. E outros que brigam por preço.\n\nDe que lado Você vai estar? Descubra o método completo no link.',
     mediaType: 'video',
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-beautician-massaging-a-womans-face-in-a-spa-42898-large.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=600&q=80',
     videoDuration: '0:45',
     classification: 'ESCALADO',
@@ -78,8 +84,9 @@ export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
     daysActive: 9,
     platforms: ['facebook', 'instagram'],
     variationsCount: 2,
-    adCopy: 'Como atrair pacientes qualificados para procedimentos de alto valor todos os dias sem depender exclusivamente de indicações ou dar descontos.',
+    adCopy: 'Como atrair pacientes qualificados para procedimentos de alto valor todos os dias sem depender exclusivamente de indicações ou dar descontos na avaliação.',
     mediaType: 'video',
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-doctor-checking-a-patient-in-a-clinic-42861-large.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=600&q=80',
     videoDuration: '1:15',
     classification: 'ESCALADO',
@@ -95,8 +102,9 @@ export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
     platforms: ['facebook', 'instagram', 'audience'],
     variationsCount: 1,
     partnerPage: 'Harmonizapro',
-    adCopy: 'Workshop Exclusivo: O Método de Escala para Clínicas de Harmonização e Estética Avançada. Descubra os 3 pilares do faturamento previsível.',
+    adCopy: 'Workshop Exclusivo: O Método de Escala para Clínicas de Harmonização e Estética Avançada. Descubra os 3 pilares do faturamento previsível para faturar 6 dígitos por mês.',
     mediaType: 'video',
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-dermatologist-examining-a-female-patients-face-42866-large.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=600&q=80',
     videoDuration: '0:38',
     classification: 'TESTE',
@@ -111,8 +119,9 @@ export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
     daysActive: 10,
     platforms: ['facebook', 'instagram', 'messenger'],
     variationsCount: 2,
-    adCopy: 'Se você ainda está cobrando barato para fechar procedimentos, você está perdendo os melhores clientes da sua região. Veja como virar essa chave.',
+    adCopy: 'Se você ainda está cobrando barato para fechar procedimentos, você está perdendo os melhores clientes da sua região. Veja como virar essa chave e vender com autoridade.',
     mediaType: 'video',
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-young-woman-talking-on-a-video-call-with-her-phone-41489-large.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=600&q=80',
     videoDuration: '0:52',
     classification: 'ESCALADO',
@@ -127,8 +136,9 @@ export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
     daysActive: 9,
     platforms: ['facebook', 'instagram'],
     variationsCount: 1,
-    adCopy: 'Descubra o passo a passo exato para posicionar sua clínica como a número 1 da sua cidade e atrair os clientes certos.',
+    adCopy: 'Descubra o passo a passo exato para posicionar sua clínica como a número 1 da sua cidade e atrair os clientes certos com campanhas segmentadas no Meta Ads.',
     mediaType: 'video',
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-female-esthetician-cleaning-a-clients-face-42897-large.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=600&q=80',
     videoDuration: '1:04',
     classification: 'TESTE',
@@ -143,9 +153,11 @@ export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
     daysActive: 10,
     platforms: ['facebook', 'instagram', 'audience'],
     variationsCount: 2,
-    adCopy: 'Diagnóstico Estratégico: Descubra os 3 erros silenciosos que estão travando o crescimento do faturamento da sua clínica estética.',
-    mediaType: 'image',
+    adCopy: 'Diagnóstico Estratégico: Descubra os 3 erros silenciosos que estão travando o crescimento do faturamento da sua clínica estética e como corrigi-los hoje.',
+    mediaType: 'video',
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-hands-of-a-man-working-on-a-computer-1107-large.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=600&q=80',
+    videoDuration: '0:30',
     classification: 'TESTE',
     ctaText: 'Saiba Mais',
     targetDomain: 'pietro.boscardin.com'
@@ -158,8 +170,9 @@ export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
     daysActive: 9,
     platforms: ['facebook', 'instagram'],
     variationsCount: 1,
-    adCopy: 'Mais de 500 profissionais já aplicaram essa metodologia de atração de clientes particulares com previsibilidade.',
+    adCopy: 'Mais de 500 profissionais já aplicaram essa metodologia de atração de clientes particulares com previsibilidade financeira.',
     mediaType: 'video',
+    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-business-presentation-in-an-office-41517-large.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=600&q=80',
     videoDuration: '0:35',
     classification: 'ESCALADO',
@@ -174,8 +187,9 @@ export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
     daysActive: 9,
     platforms: ['facebook', 'instagram', 'audience', 'messenger'],
     variationsCount: 1,
-    adCopy: 'Campanha de Alta Conversão no Meta Ads para Procedimentos Faciais. Assista à aula prática.',
+    adCopy: 'Campanha de Alta Conversão no Meta Ads para Procedimentos Faciais. Assista à aula prática e copie a estrutura pronta.',
     mediaType: 'video',
+    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=600&q=80',
     videoDuration: '0:58',
     classification: 'TESTE',
@@ -190,8 +204,9 @@ export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
     daysActive: 9,
     platforms: ['facebook', 'instagram'],
     variationsCount: 1,
-    adCopy: 'Como lotar a agenda de procedimentos faciais mesmo começando do zero no tráfego pago.',
+    adCopy: 'Como lotar a agenda de procedimentos faciais mesmo começando do zero no tráfego pago. Estratégia direta ao ponto.',
     mediaType: 'video',
+    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=600&q=80',
     videoDuration: '1:10',
     classification: 'TESTE',
@@ -206,7 +221,7 @@ export const GENERATE_MOCK_LIBRARY = (competitorName: string): LibraryAd[] => [
     daysActive: 9,
     platforms: ['facebook', 'instagram', 'audience'],
     variationsCount: 2,
-    adCopy: 'Guia Definitivo de Script de Vendas para Recepção de Clínicas de Estética. Aumente o comparecimento.',
+    adCopy: 'Guia Definitivo de Script de Vendas para Recepção de Clínicas de Estética. Aumente o comparecimento e as conversões.',
     mediaType: 'image',
     thumbnailUrl: 'https://images.unsplash.com/photo-1527613426441-4da17471b66d?auto=format&fit=crop&w=600&q=80',
     classification: 'ESCALADO',
@@ -229,6 +244,7 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
   const [selectedAdForModal, setSelectedAdForModal] = useState<LibraryAd | null>(null);
   const [activeStatusOnline, setActiveStatusOnline] = useState(true);
   const [onlySavedFilter, setOnlySavedFilter] = useState(false);
+  const [playingCardId, setPlayingCardId] = useState<string | null>(null);
 
   const libraryAds = useMemo(() => {
     return GENERATE_MOCK_LIBRARY(competitor.name);
@@ -257,6 +273,10 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
       return true;
     });
   }, [libraryAds, searchQuery, mediaTypeFilter, platformFilter, activeStatusOnline, onlySavedFilter, savedSwipes]);
+
+  const toggleCardPlay = (adId: string) => {
+    setPlayingCardId(prev => (prev === adId ? null : adId));
+  };
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -471,6 +491,7 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {filteredAds.map((ad) => {
           const isSaved = savedSwipes.includes(ad.id);
+          const isPlaying = playingCardId === ad.id;
 
           return (
             <div
@@ -487,7 +508,7 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
                   </div>
                   <button 
                     type="button" 
-                    className="text-zinc-500 hover:text-white transition-colors p-1 rounded hover:bg-zinc-800"
+                    className="text-zinc-500 hover:text-white transition-colors p-1 rounded hover:bg-zinc-800 cursor-pointer"
                   >
                     <MoreHorizontal className="w-4 h-4" />
                   </button>
@@ -507,16 +528,16 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
                 <div className="flex items-center gap-1.5 pt-0.5">
                   <span className="text-[10px] text-zinc-500 font-bold uppercase mr-1">Plataformas</span>
                   {ad.platforms.includes('facebook') && (
-                    <div className="w-4 h-4 rounded-full bg-[#1877F2] flex items-center justify-center">
+                    <div className="w-4 h-4 rounded-full bg-[#1877F2] flex items-center justify-center shadow-xs">
                       <svg className="w-2.5 h-2.5 fill-white" viewBox="0 0 24 24">
                         <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                       </svg>
                     </div>
                   )}
                   {ad.platforms.includes('instagram') && (
-                    <div className="w-4 h-4 rounded-lg bg-gradient-to-tr from-[#FD1D1D] via-[#E1306C] to-[#833AB4] flex items-center justify-center">
+                    <div className="w-4 h-4 rounded-lg bg-gradient-to-tr from-[#FD1D1D] via-[#E1306C] to-[#833AB4] flex items-center justify-center shadow-xs">
                       <svg className="w-2.5 h-2.5 fill-white" viewBox="0 0 24 24">
-                        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069z"/>
+                        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
                       </svg>
                     </div>
                   )}
@@ -575,34 +596,53 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
                   {ad.adCopy}
                 </p>
 
-                {/* Creative Media Preview */}
+                {/* Creative Media Preview with Interactive Video Playback */}
                 <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/5] border border-zinc-800 flex items-center justify-center group/media">
-                  <img
-                    src={ad.thumbnailUrl}
-                    alt="Creative Preview"
-                    className="w-full h-full object-cover opacity-90 group-hover/media:opacity-100 transition-opacity"
-                  />
+                  {ad.mediaType === 'video' && ad.videoUrl && isPlaying ? (
+                    <video
+                      src={ad.videoUrl}
+                      poster={ad.thumbnailUrl}
+                      controls
+                      autoPlay
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <>
+                      <img
+                        src={ad.thumbnailUrl}
+                        alt="Creative Preview"
+                        className="w-full h-full object-cover opacity-90 group-hover/media:opacity-100 transition-opacity"
+                      />
 
-                  {ad.mediaType === 'video' && (
-                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                      <div className="w-10 h-10 rounded-full bg-black/70 border border-white/30 flex items-center justify-center backdrop-blur-xs group-hover/media:scale-110 transition-transform shadow-lg">
-                        <Play className="w-4 h-4 text-white fill-white ml-0.5" />
-                      </div>
-                    </div>
+                      {ad.mediaType === 'video' && (
+                        <button
+                          type="button"
+                          onClick={() => toggleCardPlay(ad.id)}
+                          className="absolute inset-0 bg-black/30 flex items-center justify-center cursor-pointer"
+                          title="Reproduzir vídeo"
+                        >
+                          <div className="w-11 h-11 rounded-full bg-black/80 border border-white/40 flex items-center justify-center backdrop-blur-xs group-hover/media:scale-110 group-hover/media:border-brand-neon transition-all shadow-xl">
+                            <Play className="w-5 h-5 text-brand-neon fill-brand-neon ml-0.5" />
+                          </div>
+                        </button>
+                      )}
+                    </>
                   )}
 
                   {/* Download Floating Overlay Button */}
                   <a
-                    href={ad.thumbnailUrl}
+                    href={ad.videoUrl || ad.thumbnailUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="absolute top-2 right-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] px-2 py-1 rounded-lg flex items-center gap-1 shadow-lg transition-colors cursor-pointer"
+                    download
+                    className="absolute top-2 right-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] px-2 py-1 rounded-lg flex items-center gap-1 shadow-lg transition-colors cursor-pointer z-10"
+                    title="Baixar criativo"
                   >
                     <Download className="w-3 h-3" />
                     <span>Download</span>
                   </a>
 
-                  {ad.videoDuration && (
+                  {ad.videoDuration && !isPlaying && (
                     <span className="absolute bottom-2 left-2 bg-black/80 px-1.5 py-0.5 rounded text-[9px] font-mono text-white font-semibold">
                       {ad.videoDuration}
                     </span>
@@ -628,14 +668,14 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
         </div>
       )}
 
-      {/* 5. Detailed Ad Modal */}
+      {/* 5. Detailed Ad Modal with Real Video Player */}
       {selectedAdForModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn"
           onClick={() => setSelectedAdForModal(null)}
         >
           <div
-            className="bg-brand-sidebar border border-brand-border rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl text-white p-6 space-y-5"
+            className="bg-brand-sidebar border border-brand-border rounded-2xl max-w-4xl w-full max-h-[92vh] overflow-y-auto shadow-2xl text-white p-6 space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -658,26 +698,30 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Media Preview Box */}
-              <div className="relative rounded-2xl overflow-hidden bg-black aspect-[4/5] border border-zinc-800 flex items-center justify-center">
-                <img
-                  src={selectedAdForModal.thumbnailUrl}
-                  alt="Full Media Preview"
-                  className="w-full h-full object-cover"
-                />
-                {selectedAdForModal.mediaType === 'video' && (
-                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                    <div className="w-14 h-14 rounded-full bg-brand-neon text-black flex items-center justify-center shadow-xl">
-                      <Play className="w-6 h-6 fill-black ml-1" />
-                    </div>
-                  </div>
+            {/* Modal Body with Real Video Player */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+              {/* Real Video Player Box */}
+              <div className="relative rounded-2xl overflow-hidden bg-black aspect-[4/5] border border-zinc-800 flex items-center justify-center shadow-xl">
+                {selectedAdForModal.mediaType === 'video' && selectedAdForModal.videoUrl ? (
+                  <video
+                    src={selectedAdForModal.videoUrl}
+                    poster={selectedAdForModal.thumbnailUrl}
+                    controls
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <img
+                    src={selectedAdForModal.thumbnailUrl}
+                    alt="Full Media Preview"
+                    className="w-full h-full object-cover"
+                  />
                 )}
               </div>
 
               {/* Ad Info & Full Copy */}
-              <div className="space-y-4 flex flex-col justify-between">
+              <div className="space-y-4 flex flex-col justify-between h-full">
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
                     <img
@@ -693,9 +737,23 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
 
                   <div className="bg-brand-card border border-brand-border rounded-xl p-4 space-y-2">
                     <span className="text-[10px] font-bold uppercase text-brand-neon">Texto do Anúncio (Copy)</span>
-                    <p className="text-xs text-zinc-200 leading-relaxed whitespace-pre-line">
+                    <p className="text-xs text-zinc-200 leading-relaxed whitespace-pre-line select-text">
                       {selectedAdForModal.adCopy}
                     </p>
+                  </div>
+
+                  {/* Ad Meta Specs */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-brand-card/70 border border-brand-border rounded-xl p-3">
+                      <span className="text-[10px] text-zinc-400 block font-semibold uppercase">Formato</span>
+                      <span className="font-bold text-white uppercase">{selectedAdForModal.mediaType}</span>
+                    </div>
+                    <div className="bg-brand-card/70 border border-brand-border rounded-xl p-3">
+                      <span className="text-[10px] text-zinc-400 block font-semibold uppercase">Classificação</span>
+                      <span className={`font-bold ${selectedAdForModal.classification === 'ESCALADO' ? 'text-orange-400' : 'text-zinc-300'}`}>
+                        {selectedAdForModal.classification}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -714,15 +772,28 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
                     <span>{savedSwipes.includes(selectedAdForModal.id) ? 'SALVO NO SWIPE FILE' : 'SALVAR NO SWIPE FILE'}</span>
                   </button>
 
-                  <a
-                    href={`https://www.facebook.com/ads/library/?id=${selectedAdForModal.libraryId}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-semibold py-2.5 rounded-xl border border-zinc-700 text-xs transition-colors flex items-center justify-center gap-2"
-                  >
-                    <span>Ver na Biblioteca de Anúncios Oficial</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
+                  <div className="grid grid-cols-2 gap-2">
+                    <a
+                      href={selectedAdForModal.videoUrl || selectedAdForModal.thumbnailUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      download
+                      className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Baixar Vídeo (MP4)</span>
+                    </a>
+
+                    <a
+                      href={`https://www.facebook.com/ads/library/?id=${selectedAdForModal.libraryId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-semibold py-2.5 rounded-xl border border-zinc-700 text-xs transition-colors flex items-center justify-center gap-2"
+                    >
+                      <span>Biblioteca Meta</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
                 </div>
               </div>
             </div>

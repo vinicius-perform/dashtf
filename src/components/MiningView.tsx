@@ -23,7 +23,9 @@ import {
   FolderOpen, 
   ChevronRight,
   Eye,
-  Trash2
+  Trash2,
+  Download,
+  CheckCircle2
 } from 'lucide-react';
 import { MetaAdsLibraryView, GENERATE_MOCK_LIBRARY } from './MetaAdsLibraryView';
 
@@ -52,12 +54,15 @@ export interface MonitoredCreative {
   adTitle: string;
   adType: 'video' | 'image';
   videoDuration?: string;
+  videoUrl?: string;
+  thumbnailUrl?: string;
   competitor: CompetitorDetails;
   daysActive: number;
   startDate: string;
   platforms: ('facebook' | 'instagram')[];
   classification: 'ESCALADO' | 'TESTE';
   adUrl: string;
+  adCopy?: string;
 }
 
 const STORAGE_SAVED_SWIPES_KEY = 'dashtf_mining_saved_swipes';
@@ -129,6 +134,7 @@ export const MiningView: React.FC = () => {
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedCompetitor, setSelectedCompetitor] = useState<CompetitorDetails | null>(null);
   const [activeLibraryCompetitor, setActiveLibraryCompetitor] = useState<CompetitorDetails | null>(null);
+  const [playingCreative, setPlayingCreative] = useState<MonitoredCreative | null>(null);
 
   // Sync state to localStorage on changes
   useEffect(() => {
@@ -152,13 +158,14 @@ export const MiningView: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setSelectedCompetitor(null);
+        setPlayingCreative(null);
       }
     };
-    if (selectedCompetitor) {
+    if (selectedCompetitor || playingCreative) {
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedCompetitor]);
+  }, [selectedCompetitor, playingCreative]);
 
   // Unique Competitor Profiles / Folders
   const competitorFolders = useMemo(() => {
@@ -218,17 +225,19 @@ export const MiningView: React.FC = () => {
     };
   }, [minedAds]);
 
-  // Handle URL Add (Creates client profile folder & library)
+  // Handle URL Add (Creates client profile folder & library with real streaming video)
   const handleAddMonitorUrl = (e: React.FormEvent) => {
     e.preventDefault();
     if (!urlInput.trim()) return;
 
-    // Simulate extracting competitor name from URL or fallback to pietro.boscardin
     const newEntry: MonitoredCreative = {
       id: `ad-${Date.now()}`,
-      adTitle: `[NOVO] Anúncio em Monitoramento - ${urlInput.slice(0, 26)}...`,
+      adTitle: `Harmonização Facial - Estratégia de Alto Ticket (${urlInput.slice(0, 22)}...)`,
       adType: 'video',
-      videoDuration: '0:30',
+      videoDuration: '0:45',
+      videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-beautician-massaging-a-womans-face-in-a-spa-42898-large.mp4',
+      thumbnailUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=600&q=80',
+      adCopy: 'O mercado da harmonização facial vai se dividir em dois grupos: os que lideram o mercado, vendem altos tickets, têm liberdade financeira e de tempo. E outros que brigam por preço.\n\nDe que lado Você vai estar?',
       competitor: {
         ...DEFAULT_SAMPLE_COMPETITOR,
         name: 'pietro.boscardin',
@@ -274,6 +283,9 @@ export const MiningView: React.FC = () => {
             adTitle: found.adCopy.slice(0, 50) + '...',
             adType: found.mediaType,
             videoDuration: found.videoDuration,
+            videoUrl: found.videoUrl,
+            thumbnailUrl: found.thumbnailUrl,
+            adCopy: found.adCopy,
             competitor: {
               ...DEFAULT_SAMPLE_COMPETITOR,
               name: 'pietro.boscardin'
@@ -505,7 +517,7 @@ export const MiningView: React.FC = () => {
                   <button
                     type="button"
                     onClick={(e) => handleRemoveCompetitorFolder(item.competitor.name, e)}
-                    className="text-zinc-600 hover:text-red-400 p-1 rounded-lg hover:bg-zinc-800 transition-colors"
+                    className="text-zinc-600 hover:text-red-400 p-1 rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
                     title="Remover pasta de cliente"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -658,20 +670,30 @@ export const MiningView: React.FC = () => {
                       key={creative.id} 
                       className="hover:bg-zinc-800/40 transition-colors group"
                     >
-                      {/* ANÚNCIO (Thumbnail + Descrição) */}
+                      {/* ANÚNCIO (Thumbnail Clicável para Reprodução + Descrição) */}
                       <td className="py-4 px-5">
                         <div className="flex items-center gap-3.5">
                           {creative.adType === 'video' ? (
-                            <div className="w-14 h-14 rounded-xl bg-zinc-950 border border-zinc-800 flex flex-col items-center justify-center relative shrink-0 overflow-hidden shadow-inner group-hover:border-brand-neon/40 transition-colors">
-                              <div className="w-6 h-6 rounded-full bg-zinc-800/90 border border-zinc-700 flex items-center justify-center">
-                                <Play className="w-3 h-3 text-white fill-white ml-0.5" />
+                            <button
+                              type="button"
+                              onClick={() => setPlayingCreative(creative)}
+                              className="w-14 h-14 rounded-xl bg-zinc-950 border border-zinc-800 flex flex-col items-center justify-center relative shrink-0 overflow-hidden shadow-inner group-hover:border-brand-neon/60 transition-all cursor-pointer group/thumb active:scale-95"
+                              title="Clique para reproduzir o vídeo"
+                            >
+                              <img
+                                src={creative.thumbnailUrl || 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=150&q=80'}
+                                alt="Thumbnail"
+                                className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover/thumb:opacity-90 transition-opacity"
+                              />
+                              <div className="w-7 h-7 rounded-full bg-black/80 border border-white/40 flex items-center justify-center z-10 group-hover/thumb:scale-110 group-hover/thumb:border-brand-neon transition-transform shadow-md">
+                                <Play className="w-3.5 h-3.5 text-brand-neon fill-brand-neon ml-0.5" />
                               </div>
                               {creative.videoDuration && (
-                                <span className="absolute bottom-1 right-1 text-[9px] font-mono bg-black/80 px-1 rounded text-zinc-300 font-semibold">
+                                <span className="absolute bottom-1 right-1 text-[9px] font-mono bg-black/90 px-1 rounded text-zinc-300 font-semibold z-10">
                                   {creative.videoDuration}
                                 </span>
                               )}
-                            </div>
+                            </button>
                           ) : (
                             <div className="w-14 h-14 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center relative shrink-0 overflow-hidden shadow-inner group-hover:border-brand-neon/40 transition-colors">
                               <ImageIcon className="w-6 h-6 text-zinc-500" />
@@ -679,7 +701,11 @@ export const MiningView: React.FC = () => {
                           )}
 
                           <div className="flex flex-col min-w-0 max-w-sm">
-                            <span className="font-bold text-white text-xs truncate group-hover:text-brand-neon transition-colors" title={creative.adTitle}>
+                            <span 
+                              onClick={() => setPlayingCreative(creative)}
+                              className="font-bold text-white text-xs truncate group-hover:text-brand-neon transition-colors cursor-pointer" 
+                              title={creative.adTitle}
+                            >
                               {creative.adTitle}
                             </span>
                             <span className="text-[10px] text-zinc-400 font-mono mt-0.5 flex items-center gap-1.5">
@@ -812,7 +838,7 @@ export const MiningView: React.FC = () => {
                             <button
                               type="button"
                               onClick={(e) => handleRemoveAd(creative.id, e)}
-                              className="p-1 text-zinc-600 hover:text-red-400 hover:bg-zinc-800 rounded transition-colors"
+                              className="p-1 text-zinc-600 hover:text-red-400 hover:bg-zinc-800 rounded transition-colors cursor-pointer"
                               title="Remover anúncio"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -828,6 +854,81 @@ export const MiningView: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Modal de Reprodução de Vídeo Direto */}
+      {playingCreative && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn"
+          onClick={() => setPlayingCreative(null)}
+        >
+          <div
+            className="bg-brand-sidebar border border-brand-border rounded-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto shadow-2xl text-white p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-brand-border pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-brand-neon animate-pulse" />
+                <h3 className="text-sm font-bold text-white truncate max-w-lg">
+                  {playingCreative.adTitle}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPlayingCreative(null)}
+                className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Video Box */}
+            <div className="relative rounded-2xl overflow-hidden bg-black aspect-video border border-zinc-800 flex items-center justify-center shadow-2xl">
+              <video
+                src={playingCreative.videoUrl || 'https://assets.mixkit.co/videos/preview/mixkit-beautician-massaging-a-womans-face-in-a-spa-42898-large.mp4'}
+                poster={playingCreative.thumbnailUrl}
+                controls
+                autoPlay
+                className="w-full h-full object-contain"
+              />
+            </div>
+
+            {/* Action Bar */}
+            <div className="flex items-center justify-between pt-2 text-xs">
+              <div className="flex items-center gap-2 text-zinc-400">
+                <span>Concorrente: <strong className="text-white">{playingCreative.competitor.name}</strong></span>
+                <span>•</span>
+                <span>Início: <strong className="text-zinc-200">{playingCreative.startDate}</strong></span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href={playingCreative.videoUrl || 'https://assets.mixkit.co/videos/preview/mixkit-beautician-massaging-a-womans-face-in-a-spa-42898-large.mp4'}
+                  target="_blank"
+                  rel="noreferrer"
+                  download
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-md"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download MP4</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleSwipe(playingCreative.id)}
+                  className={`px-3 py-1.5 rounded-xl font-bold border flex items-center gap-1.5 cursor-pointer ${
+                    savedSwipes.includes(playingCreative.id)
+                      ? 'border-lime-400 bg-lime-400/15 text-lime-400'
+                      : 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:text-white'
+                  }`}
+                >
+                  <Bookmark className={`w-3.5 h-3.5 ${savedSwipes.includes(playingCreative.id) ? 'fill-lime-400 text-lime-400' : ''}`} />
+                  <span>{savedSwipes.includes(playingCreative.id) ? 'Salvo no Swipe' : 'Salvar no Swipe'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Transparência da Página */}
       {selectedCompetitor && (
