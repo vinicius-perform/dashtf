@@ -21,10 +21,16 @@ import {
   Trash2,
   Loader2,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Construction,
+  ArrowLeft
 } from 'lucide-react';
 import { MetaAdsLibraryView, LibraryAd, getInitials } from './MetaAdsLibraryView';
 import { searchCompetitorAds, getSavedMetaConfig, ADMIN_META_TOKEN, generateDynamicAdsForPage } from '../services/metaDataEngine';
+
+export interface MiningViewProps {
+  onNavigateToGerenciador?: () => void;
+}
 
 export interface CompetitorDetails {
   name: string;
@@ -93,7 +99,43 @@ export const InstagramIcon = () => (
   </div>
 );
 
-export const MiningView: React.FC = () => {
+export const MiningView: React.FC<MiningViewProps> = ({ onNavigateToGerenciador }) => {
+  const isDev = import.meta.env.DEV;
+
+  // Feature Flag: Em produção (!isDev), exibe tela de "Em Desenvolvimento"
+  if (!isDev) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[70vh] text-center space-y-6 p-6 animate-fadeIn">
+        <div className="w-24 h-24 rounded-3xl bg-lime-400/10 border-2 border-lime-400/30 flex items-center justify-center shadow-2xl shadow-lime-400/10">
+          <Construction className="text-lime-400 w-16 h-16 stroke-[1.75]" />
+        </div>
+        <div className="space-y-2 max-w-md">
+          <h2 className="text-2xl font-bold text-white tracking-tight">
+            Módulo de Mineração em Desenvolvimento
+          </h2>
+          <p className="text-gray-400 text-sm leading-relaxed">
+            Estamos construindo uma ferramenta avançada de inteligência competitiva e extração de criativos. Em breve esta funcionalidade estará liberada no seu dashboard.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (onNavigateToGerenciador) {
+              onNavigateToGerenciador();
+            } else {
+              window.location.hash = '#gerenciador';
+              window.dispatchEvent(new CustomEvent('navigate-tab', { detail: 'gerenciador' }));
+            }
+          }}
+          className="bg-brand-neon hover:bg-brand-neonHover text-black font-extrabold text-xs px-6 py-3 rounded-xl shadow-lg shadow-brand-neon/20 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+        >
+          <ArrowLeft className="w-4 h-4 text-black stroke-[2.5]" />
+          <span>Voltar para Visão Geral</span>
+        </button>
+      </div>
+    );
+  }
+
   const [searchUrl, setSearchUrl] = useState('');
   const [isMining, setIsMining] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);

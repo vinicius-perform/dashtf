@@ -325,7 +325,7 @@ export function App() {
           )}
 
           {activeTab === 'mineracao' && (
-            <MiningView />
+            <MiningView onNavigateToGerenciador={() => setActiveTab('gerenciador')} />
           )}
 
           {activeTab === 'leads' && (
