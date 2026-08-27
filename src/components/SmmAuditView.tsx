@@ -15,10 +15,10 @@ import {
   Eye,
   Clock,
   Sparkles,
-  Filter,
-  Calendar,
-  ChevronDown
+  Filter
 } from 'lucide-react';
+import { DateRangePicker, DateRange } from './DateRangePicker';
+import { getYesterdayRange } from '../utils/timezone';
 
 export interface SmmClientAudit {
   id: string;
@@ -105,7 +105,11 @@ export const mockAuditData: SmmClientAudit[] = [
 export const SmmAuditView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OK' | 'PENDING'>('ALL');
-  const [dateFilter, setDateFilter] = useState('ontem');
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    const yesterday = getYesterdayRange('America/Sao_Paulo');
+    yesterday.label = 'Ontem';
+    return yesterday;
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedAuditPost, setSelectedAuditPost] = useState<SmmClientAudit | null>(null);
 
@@ -157,7 +161,7 @@ export const SmmAuditView: React.FC = () => {
             </div>
             <div>
               <h1 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
-                Auditoria SMM (Entregas de Ontem)
+                Auditoria SMM ({dateRange.label ? `Entregas: ${dateRange.label}` : 'Entregas de Ontem'})
                 <span className="text-xs bg-zinc-800 text-zinc-300 font-bold px-2.5 py-0.5 rounded-full border border-zinc-700">
                   Apify Engine
                 </span>
@@ -298,25 +302,14 @@ export const SmmAuditView: React.FC = () => {
             </button>
           </div>
 
-          {/* Period Filter Dropdown */}
-          <div className="relative flex items-center">
-            <div className="absolute left-3 pointer-events-none text-zinc-400 flex items-center">
-              <Calendar className="w-3.5 h-3.5 text-brand-neon" />
-            </div>
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="bg-brand-bg hover:bg-zinc-900 border border-brand-border hover:border-zinc-700 text-zinc-200 text-xs font-semibold rounded-xl pl-8.5 pr-8 py-2 focus:outline-none focus:border-brand-neon focus:ring-1 focus:ring-brand-neon transition-all cursor-pointer appearance-none shadow-sm"
-            >
-              <option value="ontem" className="bg-zinc-900 text-white">Ontem (Padrão)</option>
-              <option value="hoje" className="bg-zinc-900 text-white">Hoje</option>
-              <option value="ultimos_7_dias" className="bg-zinc-900 text-white">Últimos 7 dias</option>
-              <option value="este_mes" className="bg-zinc-900 text-white">Este Mês</option>
-              <option value="personalizado" className="bg-zinc-900 text-white">Período Personalizado...</option>
-            </select>
-            <div className="absolute right-2.5 pointer-events-none text-zinc-500 flex items-center">
-              <ChevronDown className="w-3.5 h-3.5" />
-            </div>
+          {/* DateRangePicker Idêntico ao Gerenciador */}
+          <div className="flex items-center">
+            <DateRangePicker
+              value={dateRange}
+              onChange={setDateRange}
+              align="left"
+              timezone="America/Sao_Paulo"
+            />
           </div>
         </div>
 
@@ -332,7 +325,7 @@ export const SmmAuditView: React.FC = () => {
             <thead>
               <tr className="border-b border-brand-border bg-brand-sidebar/80 text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
                 <th className="py-3.5 px-5">Cliente</th>
-                <th className="py-3.5 px-5">Feed (Ontem)</th>
+                <th className="py-3.5 px-5">Feed ({dateRange.label || 'Ontem'})</th>
                 <th className="py-3.5 px-5">Legenda / Copy</th>
                 <th className="py-3.5 px-5 text-center">Status Geral</th>
                 <th className="py-3.5 px-5 text-right">Ações</th>
