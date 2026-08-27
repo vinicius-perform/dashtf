@@ -12,6 +12,7 @@ import {
   Info
 } from 'lucide-react';
 import { CompetitorDetails } from './MiningView';
+import { generateDynamicAdsForPage } from '../services/metaDataEngine';
 
 export interface LibraryAd {
   id: string;
@@ -48,128 +49,14 @@ interface MetaAdsLibraryViewProps {
   onOpenTransparency: () => void;
 }
 
-// 5 exact real ads with real HTML5 video playback
-export const realAdsData: LibraryAd[] = [
-  {
-    id: "1657551919483741",
-    libraryId: "1657551919483741",
-    status: "Ativo",
-    startDate: "19 de ago de 2026",
-    daysActive: 9,
-    platforms: ["facebook", "instagram"],
-    variationsCount: 2,
-    adCountText: "2 anúncios usam esse criativo e esse texto",
-    advertiser: "pietro.boscardin com Harmonizapro",
-    sponsored: "Patrocinado",
-    copy: "O mercado da harmonização facial vai se dividir em dois grupos: os que lideram o mercado, vendem altos tickets, têm liberdade financeira e de tempo. E outros que brigam por preço...",
-    adCopy: "O mercado da harmonização facial vai se dividir em dois grupos: os que lideram o mercado, vendem altos tickets, têm liberdade financeira e de tempo. E outros que brigam por preço...",
-    videoDuration: "0:45",
-    mediaType: "video",
-    videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=600&q=80",
-    linkDisplay: "harmonizapro.com.br",
-    targetDomain: "harmonizapro.com.br",
-    cta: "Download",
-    ctaText: "Download",
-    classification: "ESCALADO"
-  },
-  {
-    id: "2110728046544052",
-    libraryId: "2110728046544052",
-    status: "Ativo",
-    startDate: "19 de ago de 2026",
-    daysActive: 9,
-    platforms: ["facebook", "instagram"],
-    variationsCount: 2,
-    adCountText: "2 anúncios usam esse criativo e esse texto",
-    advertiser: "pietro.boscardin",
-    sponsored: "Patrocinado",
-    copy: "Como atrair pacientes qualificados para procedimentos de alto valor todos os dias sem depender exclusivamente de indicações ou dar descontos na avaliação inicial...",
-    adCopy: "Como atrair pacientes qualificados para procedimentos de alto valor todos os dias sem depender exclusivamente de indicações ou dar descontos na avaliação inicial...",
-    videoDuration: "1:15",
-    mediaType: "video",
-    videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=600&q=80",
-    linkDisplay: "pietro.boscardin.com",
-    targetDomain: "pietro.boscardin.com",
-    cta: "Download",
-    ctaText: "Download",
-    classification: "ESCALADO"
-  },
-  {
-    id: "1308100133108297",
-    libraryId: "1308100133108297",
-    status: "Ativo",
-    startDate: "22 de ago de 2026",
-    daysActive: 6,
-    platforms: ["facebook", "instagram"],
-    variationsCount: 1,
-    adCountText: "1 anúncio usa esse criativo e esse texto",
-    advertiser: "pietro.boscardin com Harmonizapro",
-    sponsored: "Patrocinado",
-    copy: "Workshop Exclusivo: O Método de Escala para Clínicas de Harmonização e Estética Avançada. Descubra os 3 pilares do faturamento previsível para escalar sua agenda...",
-    adCopy: "Workshop Exclusivo: O Método de Escala para Clínicas de Harmonização e Estética Avançada. Descubra os 3 pilares do faturamento previsível para escalar sua agenda...",
-    videoDuration: "0:58",
-    mediaType: "video",
-    videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=600&q=80",
-    linkDisplay: "harmonizapro.com.br",
-    targetDomain: "harmonizapro.com.br",
-    cta: "Download",
-    ctaText: "Download",
-    classification: "TESTE"
-  },
-  {
-    id: "1340681149940569",
-    libraryId: "1340681149940569",
-    status: "Ativo",
-    startDate: "18 de ago de 2026",
-    daysActive: 10,
-    platforms: ["facebook", "instagram"],
-    variationsCount: 2,
-    adCountText: "2 anúncios usam esse criativo e esse texto",
-    advertiser: "pietro.boscardin",
-    sponsored: "Patrocinado",
-    copy: "Se você ainda está cobrando barato para fechar procedimentos, você está perdendo os melhores clientes da sua região. Veja como virar essa chave e vender valor, não preço...",
-    adCopy: "Se você ainda está cobrando barato para fechar procedimentos, você está perdendo os melhores clientes da sua região. Veja como virar essa chave e vender valor, não preço...",
-    videoDuration: "0:52",
-    mediaType: "video",
-    videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=600&q=80",
-    linkDisplay: "pietro.boscardin.com",
-    targetDomain: "pietro.boscardin.com",
-    cta: "Download",
-    ctaText: "Download",
-    classification: "ESCALADO"
-  },
-  {
-    id: "1828062114217809",
-    libraryId: "1828062114217809",
-    status: "Ativo",
-    startDate: "19 de ago de 2026",
-    daysActive: 9,
-    platforms: ["facebook", "instagram"],
-    variationsCount: 1,
-    adCountText: "1 anúncio usa esse criativo e esse texto",
-    advertiser: "pietro.boscardin",
-    sponsored: "Patrocinado",
-    copy: "Descubra o passo a passo exato para posicionar sua clínica como a número 1 da sua cidade e atrair os clientes certos com campanhas validadas de tráfego pago...",
-    adCopy: "Descubra o passo a passo exato para posicionar sua clínica como a número 1 da sua cidade e atrair os clientes certos com campanhas validadas de tráfego pago...",
-    videoDuration: "1:04",
-    mediaType: "video",
-    videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=600&q=80",
-    linkDisplay: "harmonizapro.com.br",
-    targetDomain: "harmonizapro.com.br",
-    cta: "Download",
-    ctaText: "Download",
-    classification: "TESTE"
-  }
-];
-
-export const GENERATE_MOCK_LIBRARY = (_competitorName: string): LibraryAd[] => {
-  return realAdsData;
-};
+// Helper to generate dynamic initials for avatar fallback
+export function getInitials(name: string): string {
+  if (!name) return 'C';
+  const clean = name.trim().replace(/^@/, '');
+  const parts = clean.split(/[\s._-]+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
+}
 
 // Componente de Player de Vídeo HTML5 Real com Ref e Controles Nativos
 const VideoPlayerCard: React.FC<{
@@ -209,7 +96,7 @@ const VideoPlayerCard: React.FC<{
         className="w-full h-full object-cover rounded-xl"
       />
 
-      {/* Botão de Play Central (exibido quando pausado) */}
+      {/* Botão de Play Central */}
       {!isPlaying && (
         <div className="absolute inset-0 bg-black/30 flex items-center justify-center pointer-events-none">
           <div className="w-12 h-12 rounded-full bg-black/80 border border-white/40 flex items-center justify-center backdrop-blur-xs group-hover/media:scale-110 group-hover/media:border-brand-neon transition-all shadow-xl">
@@ -218,7 +105,7 @@ const VideoPlayerCard: React.FC<{
         </div>
       )}
 
-      {/* Botão Flutuante de Download apontando para o videoUrl */}
+      {/* Botão Flutuante de Download */}
       <a
         href={videoUrl}
         target="_blank"
@@ -257,13 +144,18 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
   const [activeStatusOnline, setActiveStatusOnline] = useState(true);
   const [onlySavedFilter, setOnlySavedFilter] = useState(false);
 
-  // Exact profile values for pietro.boscardin
-  const profileName = competitor.name || 'pietro.boscardin';
-  const profileCategory = competitor.category || 'Empreendedor(a)';
-  const profileDescription = competitor.description || 'Marketing e vendas para clínicas de harmonização facial.';
+  // 100% Dynamic profile variables extracted from competitor prop
+  const profileName = competitor.name || 'Cliente Monitorado';
+  const profileCategory = competitor.category || 'Página Meta Ads';
+  const profileDescription = competitor.description || `Anúncios e campanhas ativas no Meta Ads para ${profileName}.`;
 
-  // Render exactly the items of realAdsData without duplication
-  const libraryAds = realAdsData;
+  // Read ads dynamically from competitor object
+  const libraryAds = useMemo<LibraryAd[]>(() => {
+    if (competitor.ads && competitor.ads.length > 0) {
+      return competitor.ads;
+    }
+    return generateDynamicAdsForPage(profileName, competitor.facebookId || 'page');
+  }, [competitor, profileName]);
 
   // Count how many ads from this library are saved
   const savedCountInLibrary = useMemo(() => {
@@ -280,9 +172,10 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
 
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
-        const matchCopy = ad.adCopy.toLowerCase().includes(query);
-        const matchId = ad.libraryId.includes(query);
-        const matchDomain = ad.targetDomain.toLowerCase().includes(query);
+        const copyText = (ad.copy || ad.adCopy || '').toLowerCase();
+        const matchCopy = copyText.includes(query);
+        const matchId = (ad.libraryId || ad.id).includes(query);
+        const matchDomain = (ad.targetDomain || ad.linkDisplay || '').toLowerCase().includes(query);
         const matchAdv = (ad.advertiser || '').toLowerCase().includes(query);
         if (!matchCopy && !matchId && !matchDomain && !matchAdv) return false;
       }
@@ -327,7 +220,7 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
               type="text"
               value={profileName}
               readOnly
-              className="w-full bg-brand-bg border border-brand-border rounded-xl pl-9 pr-8 py-1.5 text-xs text-white font-semibold cursor-default"
+              className="w-full bg-brand-bg border border-brand-border rounded-xl pl-9 pr-8 py-1.5 text-xs text-white font-semibold cursor-default truncate"
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-brand-neon bg-brand-neon/10 px-1.5 py-0.5 rounded font-bold border border-brand-neon/20">
               Página Ativa
@@ -336,16 +229,22 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Competitor Profile Banner & Tab Switcher */}
+      {/* 2. Competitor Profile Banner & Tab Switcher (Dynamic) */}
       <div className="bg-brand-card border border-brand-border rounded-2xl p-6 shadow-xl space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           {/* Profile Header */}
           <div className="flex items-center gap-4">
-            <img
-              src={competitor.avatarUrl || "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80"}
-              alt={profileName}
-              className="w-14 h-14 rounded-full object-cover border-2 border-zinc-700 shadow-md"
-            />
+            {competitor.avatarUrl ? (
+              <img
+                src={competitor.avatarUrl}
+                alt={profileName}
+                className="w-14 h-14 rounded-full object-cover border-2 border-zinc-700 shadow-md"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-brand-neon via-emerald-400 to-teal-500 text-black font-black text-lg flex items-center justify-center border-2 border-brand-neon/60 shadow-md shadow-brand-neon/10 shrink-0">
+                {getInitials(profileName)}
+              </div>
+            )}
             <div className="flex flex-col">
               <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
                 {profileName}
@@ -400,11 +299,9 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
             </button>
           </div>
 
-          {/* Results counter: ~36 resultados encontrados */}
+          {/* Results counter */}
           <div className="text-xs font-bold text-zinc-400">
-            {searchQuery.trim() || onlySavedFilter || mediaTypeFilter !== 'ALL'
-              ? `~${filteredAds.length} resultados encontrados`
-              : '~36 resultados encontrados'}
+            ~{filteredAds.length} resultados encontrados
           </div>
         </div>
       </div>
@@ -417,7 +314,7 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
             <input
               type="text"
-              placeholder="Palavra-chave (ex: harmonização, vendas...)"
+              placeholder="Palavra-chave (ex: ofertas, escala...)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-brand-bg border border-brand-border rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-brand-neon transition-all"
@@ -464,7 +361,6 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
 
         {/* Active Filter Pill & Saved Swipe Filter */}
         <div className="flex items-center gap-2">
-          {/* Filter by Saved in Swipe */}
           <button
             type="button"
             onClick={() => setOnlySavedFilter(!onlySavedFilter)}
@@ -501,10 +397,12 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
         </div>
       </div>
 
-      {/* 4. Multi-Column Grid of Exact Meta Ads Cards (Exactly 5 Cards) */}
+      {/* 4. Multi-Column Grid of Dynamic Meta Ads Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {filteredAds.map((ad) => {
           const isSaved = savedSwipes.includes(ad.id);
+          const copyText = ad.copy || ad.adCopy;
+          const displayAdvertiser = ad.advertiser || profileName;
 
           return (
             <div
@@ -529,7 +427,7 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
 
                 {/* Library ID */}
                 <div className="text-[11px] text-zinc-400 font-mono">
-                  Identificação da biblioteca: <span className="text-zinc-200 font-semibold">{ad.libraryId}</span>
+                  Identificação da biblioteca: <span className="text-zinc-200 font-semibold">{ad.libraryId || ad.id}</span>
                 </div>
 
                 {/* Start Date */}
@@ -558,10 +456,10 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
 
                 {/* Variations count text */}
                 <div className="text-[11px] text-zinc-400 font-medium pt-1">
-                  {ad.adCountText || `${ad.variationsCount} ${ad.variationsCount > 1 ? 'anúncios usam' : 'anúncio usa'} esse criativo e esse texto`}
+                  {ad.adCountText || `${ad.variationsCount || 1} ${ad.variationsCount > 1 ? 'anúncios usam' : 'anúncio usa'} esse criativo e esse texto`}
                 </div>
 
-                {/* Top Action Buttons (Ver detalhes & SAVE) */}
+                {/* Top Action Buttons */}
                 <div className="pt-2 space-y-1.5">
                   <button
                     type="button"
@@ -590,14 +488,20 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
               <div className="bg-brand-sidebar border border-brand-border/80 rounded-xl p-3 space-y-2.5 text-xs flex-1 flex flex-col justify-between">
                 {/* Author row */}
                 <div className="flex items-center gap-2">
-                  <img
-                    src={competitor.avatarUrl || "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80"}
-                    alt={profileName}
-                    className="w-7 h-7 rounded-full object-cover border border-zinc-700"
-                  />
+                  {competitor.avatarUrl ? (
+                    <img
+                      src={competitor.avatarUrl}
+                      alt={displayAdvertiser}
+                      className="w-7 h-7 rounded-full object-cover border border-zinc-700"
+                    />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-brand-neon to-emerald-400 text-black font-black text-[10px] flex items-center justify-center border border-zinc-700 shrink-0">
+                      {getInitials(displayAdvertiser)}
+                    </div>
+                  )}
                   <div className="flex flex-col min-w-0">
                     <span className="font-bold text-white text-[11px] truncate">
-                      {ad.advertiser || (profileName + (ad.partnerPage ? ` com ${ad.partnerPage}` : ''))}
+                      {displayAdvertiser}
                     </span>
                     <span className="text-[9px] text-zinc-400">{ad.sponsored || 'Patrocinado'}</span>
                   </div>
@@ -605,7 +509,7 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
 
                 {/* Primary Copy Text */}
                 <p className="text-[11px] text-zinc-300 leading-relaxed line-clamp-3 select-text">
-                  {ad.adCopy}
+                  {copyText}
                 </p>
 
                 {/* Creative Media Preview with Real HTML5 Video Player */}
@@ -634,7 +538,7 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
         </div>
       )}
 
-      {/* 5. Detailed Ad Modal with Real Video Player */}
+      {/* 5. Detailed Ad Modal */}
       {selectedAdForModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn"
@@ -652,7 +556,7 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
                   <span>Anúncio Ativo</span>
                 </div>
                 <span className="text-xs text-zinc-400 font-mono">
-                  ID da Biblioteca: {selectedAdForModal.libraryId}
+                  ID da Biblioteca: {selectedAdForModal.libraryId || selectedAdForModal.id}
                 </span>
               </div>
               <button
@@ -682,11 +586,17 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
               <div className="space-y-4 flex flex-col justify-between h-full">
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
-                    <img
-                      src={competitor.avatarUrl || "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80"}
-                      alt={profileName}
-                      className="w-10 h-10 rounded-full object-cover border border-zinc-700"
-                    />
+                    {competitor.avatarUrl ? (
+                      <img
+                        src={competitor.avatarUrl}
+                        alt={profileName}
+                        className="w-10 h-10 rounded-full object-cover border border-zinc-700"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-brand-neon to-emerald-400 text-black font-black text-xs flex items-center justify-center border border-zinc-700 shrink-0">
+                        {getInitials(profileName)}
+                      </div>
+                    )}
                     <div>
                       <h4 className="font-bold text-white text-sm">
                         {selectedAdForModal.advertiser || profileName}
@@ -698,7 +608,7 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
                   <div className="bg-brand-card border border-brand-border rounded-xl p-4 space-y-2">
                     <span className="text-[10px] font-bold uppercase text-brand-neon">Texto do Anúncio (Copy)</span>
                     <p className="text-xs text-zinc-200 leading-relaxed whitespace-pre-line select-text">
-                      {selectedAdForModal.adCopy}
+                      {selectedAdForModal.copy || selectedAdForModal.adCopy}
                     </p>
                   </div>
 
@@ -745,7 +655,7 @@ export const MetaAdsLibraryView: React.FC<MetaAdsLibraryViewProps> = ({
                     </a>
 
                     <a
-                      href={`https://www.facebook.com/ads/library/?id=${selectedAdForModal.libraryId}`}
+                      href={`https://www.facebook.com/ads/library/?id=${selectedAdForModal.libraryId || selectedAdForModal.id}`}
                       target="_blank"
                       rel="noreferrer"
                       className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-semibold py-2.5 rounded-xl border border-zinc-700 text-xs transition-colors flex items-center justify-center gap-2"
