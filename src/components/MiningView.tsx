@@ -12,17 +12,20 @@ import {
   Bookmark, 
   Check, 
   Search, 
-  Plus,
-  FolderSearch,
-  X,
-  Info,
-  ExternalLink,
-  GitMerge,
-  RotateCcw,
-  MapPin,
-  Building2,
-  HelpCircle
+  Plus, 
+  FolderSearch, 
+  X, 
+  Info, 
+  ExternalLink, 
+  GitMerge, 
+  RotateCcw, 
+  MapPin, 
+  Folder, 
+  FolderOpen, 
+  ChevronRight,
+  Eye
 } from 'lucide-react';
+import { MetaAdsLibraryView } from './MetaAdsLibraryView';
 
 export interface CompetitorDetails {
   name: string;
@@ -102,6 +105,7 @@ export const MiningView: React.FC = () => {
   const [savedSwipes, setSavedSwipes] = useState<string[]>([]);
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedCompetitor, setSelectedCompetitor] = useState<CompetitorDetails | null>(null);
+  const [activeLibraryCompetitor, setActiveLibraryCompetitor] = useState<CompetitorDetails | null>(null);
 
   // Close modal on ESC key
   useEffect(() => {
@@ -115,6 +119,28 @@ export const MiningView: React.FC = () => {
     }
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedCompetitor]);
+
+  // Unique Competitor Profiles / Folders
+  const competitorFolders = useMemo(() => {
+    const map = new Map<string, { competitor: CompetitorDetails; adsCount: number; scaledCount: number; testingCount: number }>();
+    for (const item of minedAds) {
+      const key = item.competitor.name.toLowerCase();
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, {
+          competitor: item.competitor,
+          adsCount: 36, // Total ads in library mock
+          scaledCount: item.classification === 'ESCALADO' ? 15 : 12,
+          testingCount: item.classification === 'TESTE' ? 21 : 24
+        });
+      } else {
+        existing.adsCount += 1;
+        if (item.classification === 'ESCALADO') existing.scaledCount += 1;
+        if (item.classification === 'TESTE') existing.testingCount += 1;
+      }
+    }
+    return Array.from(map.values());
+  }, [minedAds]);
 
   // Dynamic KPI Metrics calculated from state
   const kpiMetrics = useMemo(() => {
@@ -152,7 +178,7 @@ export const MiningView: React.FC = () => {
     };
   }, [minedAds]);
 
-  // Handle URL Add (Ready for Backend Pipeline)
+  // Handle URL Add (Creates client profile folder & library)
   const handleAddMonitorUrl = (e: React.FormEvent) => {
     e.preventDefault();
     if (!urlInput.trim()) return;
@@ -213,6 +239,29 @@ export const MiningView: React.FC = () => {
     });
   }, [minedAds, activeTab, searchFilter]);
 
+  // If a competitor folder is opened, render the full Meta Ads Library View
+  if (activeLibraryCompetitor) {
+    return (
+      <div className="p-6 max-w-[1700px] mx-auto">
+        <MetaAdsLibraryView
+          competitor={activeLibraryCompetitor}
+          savedSwipes={savedSwipes}
+          onToggleSwipe={handleToggleSwipe}
+          onBack={() => setActiveLibraryCompetitor(null)}
+          onOpenTransparency={() => setSelectedCompetitor(activeLibraryCompetitor)}
+        />
+
+        {/* Modal de Transparência da Página */}
+        {selectedCompetitor && (
+          <CompetitorTransparencyModal
+            competitor={selectedCompetitor}
+            onClose={() => setSelectedCompetitor(null)}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6 max-w-[1700px] mx-auto animate-fadeIn relative">
       {/* 4. Área de Input (Monitoramento) */}
@@ -220,7 +269,7 @@ export const MiningView: React.FC = () => {
         <div className="flex flex-col gap-2.5">
           <label className="text-xs font-bold text-zinc-300 flex items-center gap-2">
             <Sparkles className="w-3.5 h-3.5 text-brand-neon" />
-            Adicionar URL da Biblioteca de Anúncios p/ Monitorar
+            Adicionar URL da Biblioteca de Anúncios p/ Criar Pasta de Monitoramento
           </label>
           <form onSubmit={handleAddMonitorUrl} className="flex items-center gap-3">
             <div className="relative flex-1">
@@ -237,7 +286,7 @@ export const MiningView: React.FC = () => {
               className="bg-brand-neon hover:bg-brand-neonHover text-black font-bold text-xs px-6 py-2.5 rounded-xl shadow-md shadow-brand-neon/20 transition-all flex items-center gap-2 shrink-0 cursor-pointer active:scale-95"
             >
               <Plus className="w-4 h-4 text-black stroke-[3]" />
-              <span>Monitorar</span>
+              <span>Monitorar Cliente</span>
             </button>
           </form>
         </div>
@@ -323,6 +372,85 @@ export const MiningView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* 5.b Perfis e Pastas de Clientes / Concorrentes Monitorados */}
+      {competitorFolders.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
+              <FolderOpen className="w-4 h-4 text-brand-neon" />
+              <span>Pastas de Clientes Monitorados (Meta Ads Library)</span>
+            </h3>
+            <span className="text-xs text-zinc-400">
+              Clique para abrir a biblioteca completa do cliente
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {competitorFolders.map((item) => (
+              <div
+                key={item.competitor.name}
+                className="bg-brand-card border border-brand-border hover:border-brand-neon/60 rounded-2xl p-5 shadow-lg flex flex-col justify-between space-y-4 transition-all group relative overflow-hidden"
+              >
+                {/* Decorative glow */}
+                <div className="absolute -top-10 -right-10 w-28 h-28 bg-brand-neon/5 rounded-full blur-2xl group-hover:bg-brand-neon/15 transition-all" />
+
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={item.competitor.avatarUrl || "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80"}
+                      alt={item.competitor.name}
+                      className="w-12 h-12 rounded-full object-cover border-2 border-zinc-700 shadow-md group-hover:border-brand-neon transition-colors shrink-0"
+                    />
+                    <div>
+                      <h4 className="font-extrabold text-white text-sm group-hover:text-brand-neon transition-colors flex items-center gap-1.5">
+                        {item.competitor.name}
+                      </h4>
+                      <span className="text-xs text-zinc-400 block">
+                        {item.competitor.category || 'Empreendedor(a)'}
+                      </span>
+                      <span className="text-[10px] text-zinc-500 font-mono mt-0.5 block">
+                        ID: {item.competitor.facebookId}
+                      </span>
+                    </div>
+                  </div>
+
+                  <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                    Ativo
+                  </span>
+                </div>
+
+                {/* Quick metrics inside folder card */}
+                <div className="grid grid-cols-3 gap-2 py-2 border-y border-brand-border/60 text-center">
+                  <div className="bg-brand-sidebar/80 rounded-lg p-1.5">
+                    <span className="text-[10px] text-zinc-500 block uppercase font-bold">Total</span>
+                    <span className="text-xs font-black text-white">~36 ads</span>
+                  </div>
+                  <div className="bg-brand-sidebar/80 rounded-lg p-1.5">
+                    <span className="text-[10px] text-orange-400 block uppercase font-bold">Escalados</span>
+                    <span className="text-xs font-black text-orange-400">15</span>
+                  </div>
+                  <div className="bg-brand-sidebar/80 rounded-lg p-1.5">
+                    <span className="text-[10px] text-zinc-400 block uppercase font-bold">Em Teste</span>
+                    <span className="text-xs font-black text-zinc-300">21</span>
+                  </div>
+                </div>
+
+                {/* Primary Button to Open Full Meta Ads Library */}
+                <button
+                  type="button"
+                  onClick={() => setActiveLibraryCompetitor(item.competitor)}
+                  className="w-full bg-brand-neon hover:bg-brand-neonHover text-black font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-md shadow-brand-neon/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                >
+                  <Eye className="w-4 h-4" />
+                  <span>Abrir Biblioteca Meta Ads</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 6. Sub-menu de Abas (Tabs) & Barra de Ferramentas */}
       <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
@@ -457,13 +585,13 @@ export const MiningView: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* CONCORRENTE (Avatar Circular + Nome + Categoria Clicável) */}
+                      {/* CONCORRENTE (Clique para abrir a Biblioteca Meta Ads) */}
                       <td className="py-4 px-4">
                         <button
                           type="button"
-                          onClick={() => setSelectedCompetitor(creative.competitor)}
+                          onClick={() => setActiveLibraryCompetitor(creative.competitor)}
                           className="flex items-center gap-3 cursor-pointer hover:bg-zinc-800/80 transition-colors rounded-lg p-1.5 -ml-1.5 text-left group/comp max-w-full"
-                          title="Clique para ver Transparência da Página"
+                          title="Clique para abrir a Biblioteca de Anúncios Meta deste cliente"
                         >
                           <img 
                             src={creative.competitor.avatarUrl || "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80"} 
@@ -471,8 +599,9 @@ export const MiningView: React.FC = () => {
                             className="w-10 h-10 rounded-full object-cover shrink-0 border border-zinc-700/60 shadow-sm group-hover/comp:border-brand-neon/60 transition-colors"
                           />
                           <div className="flex flex-col min-w-0">
-                            <span className="text-white font-bold text-sm truncate group-hover/comp:text-brand-neon transition-colors">
+                            <span className="text-white font-bold text-sm truncate group-hover/comp:text-brand-neon transition-colors flex items-center gap-1">
                               {creative.competitor.name}
+                              <ExternalLink className="w-3 h-3 text-zinc-500 group-hover/comp:text-brand-neon" />
                             </span>
                             <span className="text-gray-400 text-xs truncate">
                               {creative.competitor.category || 'Empreendedor(a)'}
@@ -515,9 +644,20 @@ export const MiningView: React.FC = () => {
                         )}
                       </td>
 
-                      {/* AÇÕES (2 botões empilhados estilo outline/fantasma) */}
+                      {/* AÇÕES (Botões empilhados) */}
                       <td className="py-4 px-5 text-right">
                         <div className="flex flex-col items-end gap-1.5">
+                          {/* Open Meta Ads Library */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveLibraryCompetitor(creative.competitor)}
+                            className="w-36 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-lg border border-brand-neon/50 bg-brand-neon/10 hover:bg-brand-neon hover:text-black text-brand-neon text-[11px] font-bold transition-all cursor-pointer shadow-sm"
+                            title="Abrir Biblioteca Meta Ads do Cliente"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>Abrir Biblioteca</span>
+                          </button>
+
                           {/* Copy Ad Link */}
                           <button
                             onClick={() => handleCopyLink(creative)}
@@ -570,201 +710,214 @@ export const MiningView: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. Modal de Detalhes: Popup de Transparência da Página (Meta Ads) */}
+      {/* Modal de Transparência da Página */}
       {selectedCompetitor && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
-          onClick={() => setSelectedCompetitor(null)}
-        >
-          <div 
-            className="bg-brand-sidebar border border-brand-border rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-scaleUp text-white flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="p-5 border-b border-brand-border/80 flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <img 
-                    src={selectedCompetitor.avatarUrl || "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80"} 
-                    alt={selectedCompetitor.name}
-                    className="w-10 h-10 rounded-full object-cover shrink-0 border border-zinc-700/60 shadow-md"
-                  />
-                  <div className="flex flex-col">
-                    <h3 className="text-white font-bold text-sm tracking-tight">
-                      {selectedCompetitor.name}
-                    </h3>
-                    <span className="text-gray-400 text-xs">
-                      {selectedCompetitor.category || 'Empreendedor(a)'}
+        <CompetitorTransparencyModal
+          competitor={selectedCompetitor}
+          onClose={() => setSelectedCompetitor(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+// Sub-component: Competitor Transparency Modal
+const CompetitorTransparencyModal: React.FC<{
+  competitor: CompetitorDetails;
+  onClose: () => void;
+}> = ({ competitor, onClose }) => {
+  return (
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-brand-sidebar border border-brand-border rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-scaleUp text-white flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal Header */}
+        <div className="p-5 border-b border-brand-border/80 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <img 
+                src={competitor.avatarUrl || "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80"} 
+                alt={competitor.name}
+                className="w-10 h-10 rounded-full object-cover shrink-0 border border-zinc-700/60 shadow-md"
+              />
+              <div className="flex flex-col">
+                <h3 className="text-white font-bold text-sm tracking-tight">
+                  {competitor.name}
+                </h3>
+                <span className="text-gray-400 text-xs">
+                  {competitor.category || 'Empreendedor(a)'}
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              title="Fechar"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Mini-abas: Anúncios & Sobre */}
+          <div className="flex items-center gap-6 border-b border-zinc-800 -mb-5 pt-1">
+            <button 
+              type="button" 
+              className="text-xs font-semibold text-zinc-400 hover:text-white pb-3 transition-colors cursor-pointer"
+            >
+              Anúncios
+            </button>
+            <button 
+              type="button" 
+              className="text-xs font-bold text-brand-neon pb-3 border-b-2 border-brand-neon flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <span>Sobre</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-6 space-y-6 overflow-y-auto">
+          {/* Sobre o Anunciante info text */}
+          <div className="space-y-1">
+            <h4 className="text-xs font-bold text-zinc-300">
+              Sobre o anunciante
+            </h4>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Com o objetivo de aumentar a responsabilidade e a transparência, a Meta está compartilhando mais informações sobre as Páginas e as pessoas que as administram.{' '}
+              <a 
+                href="https://www.facebook.com/ads/about/" 
+                target="_blank" 
+                rel="noreferrer" 
+                className="text-blue-400 hover:underline inline-flex items-center gap-0.5 font-medium"
+              >
+                Saiba mais sobre transparência.
+              </a>
+            </p>
+          </div>
+
+          {/* Seção Principal: Transparência da Página */}
+          <div className="bg-brand-card/90 border border-brand-border rounded-xl p-5 space-y-4">
+            <div>
+              <h4 className="text-sm font-bold text-white tracking-tight">
+                Transparência da Página
+              </h4>
+              <p className="text-xs text-zinc-400 mt-1">
+                {competitor.description}
+              </p>
+            </div>
+
+            {/* Grid de Informações (2 Colunas Desktop / 1 Coluna Mobile) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+              {/* Card 1: Páginas e contas */}
+              <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 space-y-3">
+                <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider block">
+                  Páginas e contas
+                </span>
+
+                {/* Facebook row */}
+                <div className="flex items-start gap-2.5">
+                  <FacebookIcon />
+                  <div className="flex flex-col text-xs">
+                    <span className="text-zinc-200 font-medium">
+                      Identificação: <span className="font-mono text-zinc-300">{competitor.facebookId}</span>
+                    </span>
+                    <span className="text-[11px] text-zinc-400">
+                      {competitor.facebookFollowers} • {competitor.facebookCategory}
                     </span>
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setSelectedCompetitor(null)}
-                  className="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-                  title="Fechar"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                {/* Instagram row */}
+                <div className="flex items-start gap-2.5">
+                  <InstagramIcon />
+                  <div className="flex flex-col text-xs">
+                    <span className="text-zinc-200 font-medium font-mono">
+                      {competitor.instagramHandle}
+                    </span>
+                    <span className="text-[11px] text-zinc-400">
+                      {competitor.instagramFollowers}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              {/* Mini-abas: Anúncios & Sobre */}
-              <div className="flex items-center gap-6 border-b border-zinc-800 -mb-5 pt-1">
-                <button 
-                  type="button" 
-                  className="text-xs font-semibold text-zinc-400 hover:text-white pb-3 transition-colors cursor-pointer"
-                >
-                  Anúncios
-                </button>
-                <button 
-                  type="button" 
-                  className="text-xs font-bold text-brand-neon pb-3 border-b-2 border-brand-neon flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <span>Sobre</span>
-                </button>
-              </div>
-            </div>
+              {/* Card 2: Histórico da Página */}
+              <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
+                    Histórico da Página
+                  </span>
+                  <Info className="w-3.5 h-3.5 text-zinc-500" />
+                </div>
 
-            {/* Modal Body */}
-            <div className="p-6 space-y-6 overflow-y-auto">
-              {/* Sobre o Anunciante info text */}
-              <div className="space-y-1">
-                <h4 className="text-xs font-bold text-zinc-300">
-                  Sobre o anunciante
-                </h4>
-                <p className="text-xs text-zinc-400 leading-relaxed">
-                  Com o objetivo de aumentar a responsabilidade e a transparência, a Meta está compartilhando mais informações sobre as Páginas e as pessoas que as administram.{' '}
-                  <a 
-                    href="https://www.facebook.com/ads/about/" 
-                    target="_blank" 
-                    rel="noreferrer" 
-                    className="text-blue-400 hover:underline inline-flex items-center gap-0.5 font-medium"
-                  >
-                    Saiba mais sobre transparência.
-                  </a>
+                <div className="space-y-2 text-xs text-zinc-300">
+                  <div className="flex items-center gap-2">
+                    <GitMerge className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                    <span>Mesclada com outras {competitor.mergedPagesCount} Páginas</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <RotateCcw className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                    <span>Nome da Página alterado {competitor.nameChangedCount} vezes</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                    <span>Página criada em {competitor.creationDate}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Organizações */}
+              <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
+                    Organizações que gerenciam esta Página
+                  </span>
+                  <Info className="w-3.5 h-3.5 text-zinc-500" />
+                </div>
+                <p className="text-xs text-zinc-400">
+                  {competitor.organizations}
                 </p>
               </div>
 
-              {/* Seção Principal: Transparência da Página */}
-              <div className="bg-brand-card/90 border border-brand-border rounded-xl p-5 space-y-4">
-                <div>
-                  <h4 className="text-sm font-bold text-white tracking-tight">
-                    Transparência da Página
-                  </h4>
-                  <p className="text-xs text-zinc-400 mt-1">
-                    {selectedCompetitor.description}
-                  </p>
+              {/* Card 4: Pessoas */}
+              <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
+                    Pessoas que gerenciam esta Página
+                  </span>
+                  <Info className="w-3.5 h-3.5 text-zinc-500" />
                 </div>
-
-                {/* Grid de Informações (2 Colunas Desktop / 1 Coluna Mobile) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
-                  {/* Card 1: Páginas e contas */}
-                  <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 space-y-3">
-                    <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider block">
-                      Páginas e contas
-                    </span>
-
-                    {/* Facebook row */}
-                    <div className="flex items-start gap-2.5">
-                      <FacebookIcon />
-                      <div className="flex flex-col text-xs">
-                        <span className="text-zinc-200 font-medium">
-                          Identificação: <span className="font-mono text-zinc-300">{selectedCompetitor.facebookId}</span>
-                        </span>
-                        <span className="text-[11px] text-zinc-400">
-                          {selectedCompetitor.facebookFollowers} • {selectedCompetitor.facebookCategory}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Instagram row */}
-                    <div className="flex items-start gap-2.5">
-                      <InstagramIcon />
-                      <div className="flex flex-col text-xs">
-                        <span className="text-zinc-200 font-medium font-mono">
-                          {selectedCompetitor.instagramHandle}
-                        </span>
-                        <span className="text-[11px] text-zinc-400">
-                          {selectedCompetitor.instagramFollowers}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card 2: Histórico da Página */}
-                  <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
-                        Histórico da Página
-                      </span>
-                      <Info className="w-3.5 h-3.5 text-zinc-500" />
-                    </div>
-
-                    <div className="space-y-2 text-xs text-zinc-300">
-                      <div className="flex items-center gap-2">
-                        <GitMerge className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                        <span>Mesclada com outras {selectedCompetitor.mergedPagesCount} Páginas</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <RotateCcw className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                        <span>Nome da Página alterado {selectedCompetitor.nameChangedCount} vezes</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                        <span>Página criada em {selectedCompetitor.creationDate}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card 3: Organizações */}
-                  <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
-                        Organizações que gerenciam esta Página
-                      </span>
-                      <Info className="w-3.5 h-3.5 text-zinc-500" />
-                    </div>
-                    <p className="text-xs text-zinc-400">
-                      {selectedCompetitor.organizations}
-                    </p>
-                  </div>
-
-                  {/* Card 4: Pessoas */}
-                  <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
-                        Pessoas que gerenciam esta Página
-                      </span>
-                      <Info className="w-3.5 h-3.5 text-zinc-500" />
-                    </div>
-                    <div className="flex items-start gap-2 text-xs text-zinc-300">
-                      <MapPin className="w-3.5 h-3.5 text-zinc-400 shrink-0 mt-0.5" />
-                      <span>
-                        País de localização principal das pessoas que gerenciam essa Página:{' '}
-                        <strong className="text-white font-semibold">{selectedCompetitor.primaryLocation}</strong>
-                      </span>
-                    </div>
-                  </div>
+                <div className="flex items-start gap-2 text-xs text-zinc-300">
+                  <MapPin className="w-3.5 h-3.5 text-zinc-400 shrink-0 mt-0.5" />
+                  <span>
+                    País de localização principal das pessoas que gerenciam essa Página:{' '}
+                    <strong className="text-white font-semibold">{competitor.primaryLocation}</strong>
+                  </span>
                 </div>
               </div>
             </div>
-
-            {/* Modal Footer */}
-            <div className="p-5 border-t border-brand-border/80 bg-brand-sidebar/50">
-              <a
-                href={selectedCompetitor.pageUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-semibold py-2.5 rounded-xl border border-zinc-700 transition-colors flex items-center justify-center gap-2 text-xs cursor-pointer shadow-sm"
-              >
-                <span>Ir para a Página</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            </div>
           </div>
         </div>
-      )}
+
+        {/* Modal Footer */}
+        <div className="p-5 border-t border-brand-border/80 bg-brand-sidebar/50">
+          <a
+            href={competitor.pageUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-semibold py-2.5 rounded-xl border border-zinc-700 transition-colors flex items-center justify-center gap-2 text-xs cursor-pointer shadow-sm"
+          >
+            <span>Ir para a Página Oficial</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
+      </div>
     </div>
   );
 };
