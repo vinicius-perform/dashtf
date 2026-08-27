@@ -6,6 +6,7 @@ import { MiningView } from './components/MiningView';
 import { IntegrationsView } from './components/IntegrationsView';
 import { CrmLeadsView } from './components/CrmLeadsView';
 import { CreativesView } from './components/CreativesView';
+import { SmmAuditView } from './components/SmmAuditView';
 import { MetaDebugModal } from './components/MetaDebugModal';
 import { 
   getSavedMetaConfig, 
@@ -47,7 +48,7 @@ export function App() {
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'gerenciador' | 'mineracao' | 'leads' | 'criativos' | 'integracoes'>('gerenciador');
+  const [activeTab, setActiveTab] = useState<'gerenciador' | 'mineracao' | 'leads' | 'criativos' | 'integracoes' | 'smm-audit'>('gerenciador');
   const [activeLevel, setActiveLevel] = useState<string>('campanhas');
   const [metaConfig, setMetaConfig] = useState<MetaConfig>(getSavedMetaConfig());
   const [accounts, setAccounts] = useState<MetaAdAccount[]>([]);
@@ -342,6 +343,10 @@ export function App() {
               setDateRange={setDateRange}
               onRefresh={loadAllData}
             />
+          )}
+
+          {activeTab === 'smm-audit' && (
+            <SmmAuditView />
           )}
 
           {activeTab === 'integracoes' && (

@@ -7,7 +7,8 @@ import {
   Layers,
   Link2, 
   Settings,
-  LogOut
+  LogOut,
+  CheckSquare
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -113,6 +114,20 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
             >
               <Layers className="w-4 h-4 shrink-0" />
               {!isCollapsed && <span>Criativos</span>}
+            </button>
+
+            {/* Auditoria SMM Button */}
+            <button
+              onClick={() => setActiveTab('smm-audit')}
+              title={isCollapsed ? 'Auditoria SMM' : undefined}
+              className={`w-full flex items-center ${isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'} rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'smm-audit'
+                  ? 'bg-brand-neon text-black font-bold shadow-md shadow-brand-neon/20'
+                  : 'text-zinc-300 hover:bg-zinc-800/60 hover:text-white'
+              }`}
+            >
+              <CheckSquare className="w-4 h-4 shrink-0" />
+              {!isCollapsed && <span>Auditoria SMM</span>}
             </button>
 
             {/* Integrações Meta Button */}
