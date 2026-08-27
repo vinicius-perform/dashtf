@@ -7,10 +7,7 @@ import {
   FlaskConical, 
   Calendar, 
   Play, 
-  Image as ImageIcon, 
-  Copy, 
   Bookmark, 
-  Check, 
   Search, 
   Plus, 
   FolderSearch, 
@@ -25,9 +22,10 @@ import {
   Eye,
   Trash2,
   Download,
-  CheckCircle2
+  CheckCircle2,
+  MoreHorizontal
 } from 'lucide-react';
-import { MetaAdsLibraryView, GENERATE_MOCK_LIBRARY } from './MetaAdsLibraryView';
+import { MetaAdsLibraryView, GENERATE_MOCK_LIBRARY, LibraryAd } from './MetaAdsLibraryView';
 
 export interface CompetitorDetails {
   name: string;
@@ -49,24 +47,14 @@ export interface CompetitorDetails {
   pageUrl: string;
 }
 
-export interface MonitoredCreative {
+export interface MonitoredCompetitorFolder {
   id: string;
-  adTitle: string;
-  adType: 'video' | 'image';
-  videoDuration?: string;
-  videoUrl?: string;
-  thumbnailUrl?: string;
   competitor: CompetitorDetails;
-  daysActive: number;
-  startDate: string;
-  platforms: ('facebook' | 'instagram')[];
-  classification: 'ESCALADO' | 'TESTE';
-  adUrl: string;
-  adCopy?: string;
+  addedAt: string;
 }
 
 const STORAGE_SAVED_SWIPES_KEY = 'dashtf_mining_saved_swipes';
-const STORAGE_MINED_ADS_KEY = 'dashtf_mining_monitored_creatives';
+const STORAGE_FOLDERS_KEY = 'dashtf_mining_competitor_folders';
 
 const DEFAULT_SAMPLE_COMPETITOR: CompetitorDetails = {
   name: 'pietro.boscardin',
@@ -90,16 +78,16 @@ const DEFAULT_SAMPLE_COMPETITOR: CompetitorDetails = {
 
 // SVG Icons for Platforms
 const FacebookIcon = () => (
-  <div className="w-5 h-5 rounded-full bg-[#1877F2] flex items-center justify-center shadow-sm shrink-0" title="Facebook">
-    <svg className="w-3 h-3 fill-white" viewBox="0 0 24 24">
+  <div className="w-4 h-4 rounded-full bg-[#1877F2] flex items-center justify-center shadow-xs shrink-0" title="Facebook">
+    <svg className="w-2.5 h-2.5 fill-white" viewBox="0 0 24 24">
       <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
     </svg>
   </div>
 );
 
 const InstagramIcon = () => (
-  <div className="w-5 h-5 rounded-lg bg-gradient-to-tr from-[#FD1D1D] via-[#E1306C] to-[#833AB4] flex items-center justify-center shadow-sm shrink-0" title="Instagram">
-    <svg className="w-3 h-3 fill-white" viewBox="0 0 24 24">
+  <div className="w-4 h-4 rounded-lg bg-gradient-to-tr from-[#FD1D1D] via-[#E1306C] to-[#833AB4] flex items-center justify-center shadow-xs shrink-0" title="Instagram">
+    <svg className="w-2.5 h-2.5 fill-white" viewBox="0 0 24 24">
       <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
     </svg>
   </div>
@@ -108,18 +96,19 @@ const InstagramIcon = () => (
 export const MiningView: React.FC = () => {
   const [urlInput, setUrlInput] = useState('');
   
-  // Persistent Mined Ads loaded from localStorage
-  const [minedAds, setMinedAds] = useState<MonitoredCreative[]>(() => {
+  // Persistent Competitor Folders loaded from localStorage
+  const [competitorFolders, setCompetitorFolders] = useState<MonitoredCompetitorFolder[]>(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_MINED_ADS_KEY);
-      return stored ? JSON.parse(stored) : [];
+      const stored = localStorage.getItem(STORAGE_FOLDERS_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return [];
     } catch {
       return [];
     }
   });
-
-  const [activeTab, setActiveTab] = useState<'acompanhamento' | 'escalados' | 'tempo_ativo' | 'salvos'>('acompanhamento');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Persistent Saved Swipes loaded from localStorage
   const [savedSwipes, setSavedSwipes] = useState<string[]>(() => {
@@ -131,10 +120,10 @@ export const MiningView: React.FC = () => {
     }
   });
 
-  const [searchFilter, setSearchFilter] = useState('');
   const [selectedCompetitor, setSelectedCompetitor] = useState<CompetitorDetails | null>(null);
   const [activeLibraryCompetitor, setActiveLibraryCompetitor] = useState<CompetitorDetails | null>(null);
-  const [playingCreative, setPlayingCreative] = useState<MonitoredCreative | null>(null);
+  const [playingVideoAd, setPlayingVideoAd] = useState<LibraryAd | null>(null);
+  const [playingCardId, setPlayingCardId] = useState<string | null>(null);
 
   // Sync state to localStorage on changes
   useEffect(() => {
@@ -147,52 +136,40 @@ export const MiningView: React.FC = () => {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_MINED_ADS_KEY, JSON.stringify(minedAds));
+      localStorage.setItem(STORAGE_FOLDERS_KEY, JSON.stringify(competitorFolders));
     } catch (e) {
-      console.error('Error saving mined ads to localStorage', e);
+      console.error('Error saving competitor folders to localStorage', e);
     }
-  }, [minedAds]);
+  }, [competitorFolders]);
 
   // Close modal on ESC key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setSelectedCompetitor(null);
-        setPlayingCreative(null);
+        setPlayingVideoAd(null);
       }
     };
-    if (selectedCompetitor || playingCreative) {
+    if (selectedCompetitor || playingVideoAd) {
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedCompetitor, playingCreative]);
+  }, [selectedCompetitor, playingVideoAd]);
 
-  // Unique Competitor Profiles / Folders
-  const competitorFolders = useMemo(() => {
-    const map = new Map<string, { competitor: CompetitorDetails; adsCount: number; scaledCount: number; testingCount: number }>();
-    for (const item of minedAds) {
-      const key = item.competitor.name.toLowerCase();
-      const existing = map.get(key);
-      if (!existing) {
-        map.set(key, {
-          competitor: item.competitor,
-          adsCount: 36, // Total ads in library mock
-          scaledCount: item.classification === 'ESCALADO' ? 15 : 12,
-          testingCount: item.classification === 'TESTE' ? 21 : 24
-        });
-      } else {
-        existing.adsCount += 1;
-        if (item.classification === 'ESCALADO') existing.scaledCount += 1;
-        if (item.classification === 'TESTE') existing.testingCount += 1;
-      }
-    }
-    return Array.from(map.values());
-  }, [minedAds]);
+  // All mock ads from current competitors to calculate metrics & swipe file list
+  const allKnownAds = useMemo(() => {
+    return GENERATE_MOCK_LIBRARY('pietro.boscardin');
+  }, []);
 
-  // Dynamic KPI Metrics calculated from state
+  // Saved Swipe File Ads
+  const savedAdsList = useMemo(() => {
+    return allKnownAds.filter(ad => savedSwipes.includes(ad.id));
+  }, [allKnownAds, savedSwipes]);
+
+  // Dynamic KPI Metrics calculated from monitored competitor folders
   const kpiMetrics = useMemo(() => {
-    const totalCount = minedAds.length;
-    if (totalCount === 0) {
+    const foldersCount = competitorFolders.length;
+    if (foldersCount === 0) {
       return {
         monitoredCompetitors: 0,
         totalCreatives: 0,
@@ -203,62 +180,42 @@ export const MiningView: React.FC = () => {
       };
     }
 
-    const uniqueCompetitors = new Set(minedAds.map(ad => ad.competitor.name.trim().toLowerCase())).size;
-    const new7Days = minedAds.filter(ad => ad.daysActive <= 7).length;
-    const scaled = minedAds.filter(ad => ad.classification === 'ESCALADO').length;
-    const testingAds = minedAds.filter(ad => ad.classification === 'TESTE');
-    const testingCount = testingAds.length;
-
-    let avgDays = '-- dias';
-    if (testingCount > 0) {
-      const sumDays = testingAds.reduce((acc, ad) => acc + (ad.daysActive || 0), 0);
-      avgDays = `${Math.round(sumDays / testingCount)} dias`;
-    }
+    const totalAds = foldersCount * 36;
+    const scaledAds = foldersCount * 15;
+    const testingAds = foldersCount * 21;
+    const new7Days = foldersCount * 12;
 
     return {
-      monitoredCompetitors: uniqueCompetitors,
-      totalCreatives: totalCount,
+      monitoredCompetitors: foldersCount,
+      totalCreatives: totalAds,
       newCreatives7Days: new7Days,
-      scaledCreatives: scaled,
-      testingCreatives: testingCount,
-      avgDaysTesting: avgDays
+      scaledCreatives: scaledAds,
+      testingCreatives: testingAds,
+      avgDaysTesting: '9 dias'
     };
-  }, [minedAds]);
+  }, [competitorFolders]);
 
   // Handle URL Add (Creates client profile folder & library with real streaming video)
   const handleAddMonitorUrl = (e: React.FormEvent) => {
     e.preventDefault();
     if (!urlInput.trim()) return;
 
-    const newEntry: MonitoredCreative = {
-      id: `ad-${Date.now()}`,
-      adTitle: `Harmonização Facial - Estratégia de Alto Ticket (${urlInput.slice(0, 22)}...)`,
-      adType: 'video',
-      videoDuration: '0:45',
-      videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-beautician-massaging-a-womans-face-in-a-spa-42898-large.mp4',
-      thumbnailUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=600&q=80',
-      adCopy: 'O mercado da harmonização facial vai se dividir em dois grupos: os que lideram o mercado, vendem altos tickets, têm liberdade financeira e de tempo. E outros que brigam por preço.\n\nDe que lado Você vai estar?',
-      competitor: {
-        ...DEFAULT_SAMPLE_COMPETITOR,
-        name: 'pietro.boscardin',
-        pageUrl: urlInput
-      },
-      daysActive: 1,
-      startDate: new Date().toLocaleDateString('pt-BR'),
-      platforms: ['facebook', 'instagram'],
-      classification: 'TESTE',
-      adUrl: urlInput
-    };
+    // Check if competitor is already monitored
+    const exists = competitorFolders.some(f => f.competitor.name.toLowerCase() === 'pietro.boscardin');
+    if (!exists) {
+      const newFolder: MonitoredCompetitorFolder = {
+        id: `folder-${Date.now()}`,
+        competitor: {
+          ...DEFAULT_SAMPLE_COMPETITOR,
+          name: 'pietro.boscardin',
+          pageUrl: urlInput
+        },
+        addedAt: new Date().toLocaleDateString('pt-BR')
+      };
+      setCompetitorFolders(prev => [newFolder, ...prev]);
+    }
 
-    setMinedAds(prev => [newEntry, ...prev]);
     setUrlInput('');
-  };
-
-  // Copy Ad link handler
-  const handleCopyLink = (ad: MonitoredCreative) => {
-    navigator.clipboard.writeText(ad.adUrl);
-    setCopiedId(ad.id);
-    setTimeout(() => setCopiedId(null), 2000);
   };
 
   // Toggle Save to Swipe File (Persistent until manual removal)
@@ -269,73 +226,15 @@ export const MiningView: React.FC = () => {
         ? prev.filter(item => item !== id) 
         : [...prev, id];
     });
-
-    // If saving an ad from Meta Ads Library that is not yet in minedAds, ensure it is added
-    if (!savedSwipes.includes(id)) {
-      setMinedAds(prev => {
-        if (prev.some(a => a.id === id)) return prev;
-        
-        const mockLibrary = GENERATE_MOCK_LIBRARY('pietro.boscardin');
-        const found = mockLibrary.find(a => a.id === id);
-        if (found) {
-          const newCreative: MonitoredCreative = {
-            id: found.id,
-            adTitle: found.adCopy.slice(0, 50) + '...',
-            adType: found.mediaType,
-            videoDuration: found.videoDuration,
-            videoUrl: found.videoUrl,
-            thumbnailUrl: found.thumbnailUrl,
-            adCopy: found.adCopy,
-            competitor: {
-              ...DEFAULT_SAMPLE_COMPETITOR,
-              name: 'pietro.boscardin'
-            },
-            daysActive: found.daysActive,
-            startDate: found.startDate,
-            platforms: found.platforms.filter((p): p is ('facebook' | 'instagram') => p === 'facebook' || p === 'instagram'),
-            classification: found.classification,
-            adUrl: `https://www.facebook.com/ads/library/?id=${found.libraryId}`
-          };
-          return [newCreative, ...prev];
-        }
-        return prev;
-      });
-    }
   };
 
   // Remove competitor folder manually
-  const handleRemoveCompetitorFolder = (competitorName: string, e: React.MouseEvent) => {
+  const handleRemoveCompetitorFolder = (folderId: string, competitorName: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm(`Deseja remover a pasta e todos os anúncios monitorados de ${competitorName}?`)) {
-      setMinedAds(prev => prev.filter(a => a.competitor.name.toLowerCase() !== competitorName.toLowerCase()));
+    if (window.confirm(`Deseja remover a pasta do cliente ${competitorName}?`)) {
+      setCompetitorFolders(prev => prev.filter(f => f.id !== folderId));
     }
   };
-
-  // Remove single ad from table manually
-  const handleRemoveAd = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setMinedAds(prev => prev.filter(a => a.id !== id));
-    setSavedSwipes(prev => prev.filter(s => s !== id));
-  };
-
-  // Filtered creatives according to active tab & search
-  const filteredCreatives = useMemo(() => {
-    return minedAds.filter(c => {
-      // Tab filter
-      if (activeTab === 'salvos' && !savedSwipes.includes(c.id)) return false;
-      if (activeTab === 'escalados' && c.classification !== 'ESCALADO') return false;
-      if (activeTab === 'tempo_ativo' && c.daysActive < 10) return false;
-
-      // Text search
-      if (searchFilter.trim()) {
-        const query = searchFilter.toLowerCase();
-        const matchTitle = c.adTitle.toLowerCase().includes(query);
-        const matchComp = c.competitor.name.toLowerCase().includes(query);
-        if (!matchTitle && !matchComp) return false;
-      }
-      return true;
-    });
-  }, [minedAds, activeTab, searchFilter, savedSwipes]);
 
   // If a competitor folder is opened, render the full Meta Ads Library View
   if (activeLibraryCompetitor) {
@@ -362,12 +261,12 @@ export const MiningView: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6 max-w-[1700px] mx-auto animate-fadeIn relative">
-      {/* 4. Área de Input (Monitoramento) */}
+      {/* 1. Área de Input (Monitoramento) */}
       <div className="bg-brand-card/90 border border-brand-border rounded-2xl p-5 shadow-lg relative overflow-hidden backdrop-blur-sm">
         <div className="flex flex-col gap-2.5">
           <label className="text-xs font-bold text-zinc-300 flex items-center gap-2">
             <Sparkles className="w-3.5 h-3.5 text-brand-neon" />
-            Adicionar URL da Biblioteca de Anúncios p/ Criar Pasta de Monitoramento
+            Adicionar URL da Biblioteca de Anúncios p/ Monitorar Cliente
           </label>
           <form onSubmit={handleAddMonitorUrl} className="flex items-center gap-3">
             <div className="relative flex-1">
@@ -390,7 +289,7 @@ export const MiningView: React.FC = () => {
         </div>
       </div>
 
-      {/* 5. Grid de KPIs (6 Cards - Dinâmicos e Zerados por Padrão) */}
+      {/* 2. Grid de KPIs (6 Cards - Dinâmicos e Zerados por Padrão) */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
         {/* Card 1: Concorrentes Monitorados */}
         <div className="bg-brand-card border border-brand-border rounded-xl p-4 flex flex-col justify-between hover:border-brand-neon/40 transition-all shadow-sm group">
@@ -471,23 +370,35 @@ export const MiningView: React.FC = () => {
         </div>
       </div>
 
-      {/* 5.b Perfis e Pastas de Clientes / Concorrentes Monitorados */}
-      {competitorFolders.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
-              <FolderOpen className="w-4 h-4 text-brand-neon" />
-              <span>Pastas de Clientes Monitorados (Meta Ads Library)</span>
-            </h3>
-            <span className="text-xs text-zinc-400">
-              Salvo no seu perfil permanentemente até remoção
-            </span>
-          </div>
+      {/* 3. Perfis e Pastas de Clientes Monitorados (Meta Ads Library) */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
+            <FolderOpen className="w-4 h-4 text-brand-neon" />
+            <span>Pastas de Clientes Monitorados (Meta Ads Library)</span>
+          </h3>
+          <span className="text-xs text-zinc-400">
+            {competitorFolders.length} {competitorFolders.length === 1 ? 'cliente monitorado' : 'clientes monitorados'}
+          </span>
+        </div>
 
+        {competitorFolders.length === 0 ? (
+          <div className="bg-brand-card border border-brand-border rounded-2xl p-12 text-center shadow-lg">
+            <div className="flex flex-col items-center justify-center gap-3 text-zinc-500 max-w-md mx-auto">
+              <div className="w-14 h-14 rounded-full bg-zinc-800/60 border border-zinc-700 flex items-center justify-center text-zinc-400 shadow-inner">
+                <FolderSearch className="w-7 h-7 stroke-[1.75]" />
+              </div>
+              <h4 className="text-sm font-bold text-white">Nenhum cliente em monitoramento</h4>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Insira a URL da Biblioteca de Anúncios do Meta Ads no campo acima para criar a pasta do cliente com todos os anúncios reais e vídeos reproduzíveis.
+              </p>
+            </div>
+          </div>
+        ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {competitorFolders.map((item) => (
               <div
-                key={item.competitor.name}
+                key={item.id}
                 className="bg-brand-card border border-brand-border hover:border-brand-neon/60 rounded-2xl p-5 shadow-lg flex flex-col justify-between space-y-4 transition-all group relative overflow-hidden"
               >
                 {/* Decorative glow */}
@@ -516,11 +427,11 @@ export const MiningView: React.FC = () => {
                   {/* Remove Folder Button */}
                   <button
                     type="button"
-                    onClick={(e) => handleRemoveCompetitorFolder(item.competitor.name, e)}
-                    className="text-zinc-600 hover:text-red-400 p-1 rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
+                    onClick={(e) => handleRemoveCompetitorFolder(item.id, item.competitor.name, e)}
+                    className="text-zinc-600 hover:text-red-400 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
                     title="Remover pasta de cliente"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
 
@@ -553,377 +464,245 @@ export const MiningView: React.FC = () => {
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* 6. Sub-menu de Abas (Tabs) & Barra de Ferramentas */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
-        <div className="flex items-center gap-2">
-          {/* Aba 1: Acompanhamento de Criativos */}
-          <button
-            onClick={() => setActiveTab('acompanhamento')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'acompanhamento'
-                ? 'border border-brand-neon text-brand-neon bg-brand-neon/10 shadow-sm shadow-brand-neon/10'
-                : 'border border-brand-border bg-brand-card text-zinc-400 hover:text-white hover:border-zinc-700'
-            }`}
-          >
-            Acompanhamento de Criativos
-          </button>
-
-          {/* Aba 2: 🔥 Anúncios Escalados */}
-          <button
-            onClick={() => setActiveTab('escalados')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'escalados'
-                ? 'border border-brand-neon text-brand-neon bg-brand-neon/10 shadow-sm shadow-brand-neon/10'
-                : 'border border-brand-border bg-brand-card text-zinc-400 hover:text-white hover:border-zinc-700'
-            }`}
-          >
-            🔥 Anúncios Escalados
-          </button>
-
-          {/* Aba 3: 📈 Tempo Ativo */}
-          <button
-            onClick={() => setActiveTab('tempo_ativo')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'tempo_ativo'
-                ? 'border border-brand-neon text-brand-neon bg-brand-neon/10 shadow-sm shadow-brand-neon/10'
-                : 'border border-brand-border bg-brand-card text-zinc-400 hover:text-white hover:border-zinc-700'
-            }`}
-          >
-            📈 Tempo Ativo
-          </button>
-
-          {/* Aba 4: 💾 Swipe File (Salvos) */}
-          <button
-            onClick={() => setActiveTab('salvos')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'salvos'
-                ? 'border border-lime-400 text-lime-400 bg-lime-400/10 shadow-sm shadow-lime-400/10'
-                : 'border border-brand-border bg-brand-card text-zinc-400 hover:text-white hover:border-zinc-700'
-            }`}
-          >
-            <Bookmark className={`w-3.5 h-3.5 ${activeTab === 'salvos' ? 'fill-lime-400' : ''}`} />
-            <span>💾 Swipe File ({savedSwipes.length})</span>
-          </button>
-        </div>
-
-        {/* Search Input for Table */}
-        <div className="relative w-64">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-          <input
-            type="text"
-            placeholder="Filtrar por anúncio ou concorrente..."
-            value={searchFilter}
-            onChange={(e) => setSearchFilter(e.target.value)}
-            className="w-full bg-brand-card border border-brand-border rounded-xl pl-8 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-brand-neon transition-all"
-          />
-        </div>
+        )}
       </div>
 
-      {/* 7. Tabela de Mineração (Swipe File) */}
-      <div className="bg-brand-card border border-brand-border rounded-2xl overflow-hidden shadow-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse whitespace-nowrap">
-            <thead>
-              <tr className="bg-brand-sidebar border-b border-brand-border text-[11px] font-bold text-brand-textMuted uppercase tracking-wider">
-                <th className="py-3.5 px-5">ANÚNCIO</th>
-                <th className="py-3.5 px-4">CONCORRENTE</th>
-                <th className="py-3.5 px-4 text-center">DIAS ATIVO</th>
-                <th className="py-3.5 px-4 text-center">DATA DE INÍCIO</th>
-                <th className="py-3.5 px-4 text-center">PLATAFORMA</th>
-                <th className="py-3.5 px-4 text-center">CLASSIFICAÇÃO</th>
-                <th className="py-3.5 px-5 text-right">AÇÕES</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-brand-border/60 text-xs text-zinc-200">
-              {/* Empty State when no ads exist */}
-              {minedAds.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-12 px-4 text-center">
-                    <div className="flex flex-col items-center justify-center gap-3 text-zinc-500 max-w-md mx-auto">
-                      <div className="w-12 h-12 rounded-full bg-zinc-800/60 border border-zinc-700 flex items-center justify-center text-zinc-400 shadow-inner">
-                        <FolderSearch className="w-6 h-6 stroke-[1.75]" />
+      {/* 4. Seção do Swipe File (Criativos Salvos) */}
+      <div className="space-y-4 pt-4 border-t border-brand-border/80">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bookmark className="w-4 h-4 text-lime-400 fill-lime-400" />
+            <h3 className="text-xs font-extrabold text-white uppercase tracking-wider">
+              Meu Swipe File (Criativos Salvos)
+            </h3>
+            <span className="text-xs text-brand-neon font-bold bg-brand-neon/10 px-2 py-0.5 rounded-full border border-brand-neon/20">
+              {savedAdsList.length} salvos
+            </span>
+          </div>
+          <span className="text-xs text-zinc-400">
+            Criativos salvos permanentemente até você remover
+          </span>
+        </div>
+
+        {savedAdsList.length === 0 ? (
+          <div className="bg-brand-card border border-brand-border rounded-2xl p-8 text-center">
+            <p className="text-xs text-zinc-400">
+              Nenhum criativo salvo no Swipe File ainda. Abra a biblioteca de um cliente e clique no botão <strong>SAVE</strong> para salvar seus criativos favoritos aqui.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {savedAdsList.map((ad) => {
+              const isPlaying = playingCardId === ad.id;
+
+              return (
+                <div
+                  key={ad.id}
+                  className="bg-brand-card border border-brand-border hover:border-zinc-600 rounded-2xl p-4 flex flex-col justify-between space-y-3.5 shadow-xl transition-all group"
+                >
+                  {/* Card Meta Header */}
+                  <div className="space-y-2 border-b border-brand-border/70 pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                        <CheckCircle2 className="w-3.5 h-3.5 fill-emerald-500/20 text-emerald-400" />
+                        <span>{ad.status}</span>
                       </div>
-                      <p className="text-xs text-zinc-400 font-medium leading-relaxed">
-                        Nenhum criativo em monitoramento. Insira a URL da Biblioteca de Anúncios de um concorrente acima para começar a rastrear.
-                      </p>
+                      <span className="text-[10px] text-zinc-400 font-mono">ID: {ad.libraryId}</span>
                     </div>
-                  </td>
-                </tr>
-              ) : filteredCreatives.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-10 text-center text-zinc-500 text-xs">
-                    {activeTab === 'salvos' 
-                      ? 'Nenhum anúncio salvo no Swipe File ainda. Clique em "Save to Swipe File" para salvar.' 
-                      : 'Nenhum criativo encontrado para os filtros selecionados.'}
-                  </td>
-                </tr>
-              ) : (
-                filteredCreatives.map((creative) => {
-                  const isSaved = savedSwipes.includes(creative.id);
-                  const isCopied = copiedId === creative.id;
 
-                  return (
-                    <tr 
-                      key={creative.id} 
-                      className="hover:bg-zinc-800/40 transition-colors group"
-                    >
-                      {/* ANÚNCIO (Thumbnail Clicável para Reprodução + Descrição) */}
-                      <td className="py-4 px-5">
-                        <div className="flex items-center gap-3.5">
-                          {creative.adType === 'video' ? (
-                            <button
-                              type="button"
-                              onClick={() => setPlayingCreative(creative)}
-                              className="w-14 h-14 rounded-xl bg-zinc-950 border border-zinc-800 flex flex-col items-center justify-center relative shrink-0 overflow-hidden shadow-inner group-hover:border-brand-neon/60 transition-all cursor-pointer group/thumb active:scale-95"
-                              title="Clique para reproduzir o vídeo"
-                            >
-                              <img
-                                src={creative.thumbnailUrl || 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=150&q=80'}
-                                alt="Thumbnail"
-                                className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover/thumb:opacity-90 transition-opacity"
-                              />
-                              <div className="w-7 h-7 rounded-full bg-black/80 border border-white/40 flex items-center justify-center z-10 group-hover/thumb:scale-110 group-hover/thumb:border-brand-neon transition-transform shadow-md">
-                                <Play className="w-3.5 h-3.5 text-brand-neon fill-brand-neon ml-0.5" />
-                              </div>
-                              {creative.videoDuration && (
-                                <span className="absolute bottom-1 right-1 text-[9px] font-mono bg-black/90 px-1 rounded text-zinc-300 font-semibold z-10">
-                                  {creative.videoDuration}
-                                </span>
-                              )}
-                            </button>
-                          ) : (
-                            <div className="w-14 h-14 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center relative shrink-0 overflow-hidden shadow-inner group-hover:border-brand-neon/40 transition-colors">
-                              <ImageIcon className="w-6 h-6 text-zinc-500" />
-                            </div>
-                          )}
+                    <div className="text-[11px] text-zinc-400">
+                      Início: {ad.startDate}
+                    </div>
 
-                          <div className="flex flex-col min-w-0 max-w-sm">
-                            <span 
-                              onClick={() => setPlayingCreative(creative)}
-                              className="font-bold text-white text-xs truncate group-hover:text-brand-neon transition-colors cursor-pointer" 
-                              title={creative.adTitle}
-                            >
-                              {creative.adTitle}
-                            </span>
-                            <span className="text-[10px] text-zinc-400 font-mono mt-0.5 flex items-center gap-1.5">
-                              <span className="uppercase text-[9px] bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-300 font-semibold">
-                                {creative.adType === 'video' ? 'Vídeo' : 'Imagem'}
-                              </span>
-                              ID: {creative.id}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
+                    {/* Action Buttons */}
+                    <div className="pt-2 space-y-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setPlayingVideoAd(ad)}
+                        className="w-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 hover:text-white font-semibold py-1.5 rounded-xl border border-zinc-700 text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-zinc-400" />
+                        <span>Ver detalhes & Vídeo</span>
+                      </button>
 
-                      {/* CONCORRENTE (Clique para abrir a Biblioteca Meta Ads) */}
-                      <td className="py-4 px-4">
-                        <button
-                          type="button"
-                          onClick={() => setActiveLibraryCompetitor(creative.competitor)}
-                          className="flex items-center gap-3 cursor-pointer hover:bg-zinc-800/80 transition-colors rounded-lg p-1.5 -ml-1.5 text-left group/comp max-w-full"
-                          title="Clique para abrir a Biblioteca de Anúncios Meta deste cliente"
-                        >
-                          <img 
-                            src={creative.competitor.avatarUrl || "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80"} 
-                            alt={creative.competitor.name}
-                            className="w-10 h-10 rounded-full object-cover shrink-0 border border-zinc-700/60 shadow-sm group-hover/comp:border-brand-neon/60 transition-colors"
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSwipe(ad.id)}
+                        className="w-full py-1.5 rounded-xl text-xs font-extrabold transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer bg-lime-400/15 border border-lime-400 text-lime-400 shadow-md shadow-lime-400/10 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400"
+                        title="Clique para remover do Swipe File"
+                      >
+                        <Bookmark className="w-3.5 h-3.5 fill-lime-400 text-lime-400" />
+                        <span>SALVO NO SWIPE (Remover ✕)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Ad Post Body */}
+                  <div className="bg-brand-sidebar border border-brand-border/80 rounded-xl p-3 space-y-2 text-xs flex-1 flex flex-col justify-between">
+                    <p className="text-[11px] text-zinc-300 leading-relaxed line-clamp-2">
+                      {ad.adCopy}
+                    </p>
+
+                    {/* Video / Image Box with Real Streaming */}
+                    <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/5] border border-zinc-800 flex items-center justify-center group/media">
+                      {ad.mediaType === 'video' && ad.videoUrl && isPlaying ? (
+                        <video
+                          src={ad.videoUrl}
+                          poster={ad.thumbnailUrl}
+                          controls
+                          autoPlay
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <>
+                          <img
+                            src={ad.thumbnailUrl}
+                            alt="Creative Preview"
+                            className="w-full h-full object-cover opacity-90 group-hover/media:opacity-100 transition-opacity"
                           />
-                          <div className="flex flex-col min-w-0">
-                            <span className="text-white font-bold text-sm truncate group-hover/comp:text-brand-neon transition-colors flex items-center gap-1">
-                              {creative.competitor.name}
-                              <ExternalLink className="w-3 h-3 text-zinc-500 group-hover/comp:text-brand-neon" />
-                            </span>
-                            <span className="text-gray-400 text-xs truncate">
-                              {creative.competitor.category || 'Empreendedor(a)'}
-                            </span>
-                          </div>
-                        </button>
-                      </td>
 
-                      {/* DIAS ATIVO */}
-                      <td className="py-4 px-4 text-center">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-zinc-800/80 border border-zinc-700/60 text-xs font-semibold text-zinc-200">
-                          Há {creative.daysActive} Dias
-                        </span>
-                      </td>
-
-                      {/* DATA DE INÍCIO */}
-                      <td className="py-4 px-4 text-center font-mono text-xs text-zinc-300">
-                        {creative.startDate}
-                      </td>
-
-                      {/* PLATAFORMA */}
-                      <td className="py-4 px-4">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {creative.platforms.includes('facebook') && <FacebookIcon />}
-                          {creative.platforms.includes('instagram') && <InstagramIcon />}
-                        </div>
-                      </td>
-
-                      {/* CLASSIFICAÇÃO */}
-                      <td className="py-4 px-4 text-center">
-                        {creative.classification === 'ESCALADO' ? (
-                          <span className="inline-flex items-center gap-1 bg-brand-neon text-black font-extrabold text-xs px-3 py-1 rounded-full shadow-md shadow-brand-neon/20">
-                            <Flame className="w-3.5 h-3.5 fill-black text-black" />
-                            <span>Escalado</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 bg-zinc-800/70 border border-zinc-700 text-zinc-400 font-medium text-xs px-3 py-1 rounded-full">
-                            <span>Em Teste</span>
-                          </span>
-                        )}
-                      </td>
-
-                      {/* AÇÕES (Botões empilhados) */}
-                      <td className="py-4 px-5 text-right">
-                        <div className="flex flex-col items-end gap-1.5">
-                          {/* Open Meta Ads Library */}
-                          <button
-                            type="button"
-                            onClick={() => setActiveLibraryCompetitor(creative.competitor)}
-                            className="w-36 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-lg border border-brand-neon/50 bg-brand-neon/10 hover:bg-brand-neon hover:text-black text-brand-neon text-[11px] font-bold transition-all cursor-pointer shadow-sm"
-                            title="Abrir Biblioteca Meta Ads do Cliente"
-                          >
-                            <Eye className="w-3 h-3" />
-                            <span>Abrir Biblioteca</span>
-                          </button>
-
-                          {/* Copy Ad Link */}
-                          <button
-                            onClick={() => handleCopyLink(creative)}
-                            className={`w-36 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all cursor-pointer ${
-                              isCopied
-                                ? 'border-brand-neon bg-brand-neon/15 text-brand-neon'
-                                : 'border-zinc-700 bg-zinc-800/50 hover:bg-zinc-700/60 hover:border-zinc-500 text-zinc-200'
-                            }`}
-                            title="Copiar Link da Biblioteca de Anúncios"
-                          >
-                            {isCopied ? (
-                              <>
-                                <Check className="w-3 h-3 text-brand-neon" />
-                                <span className="font-bold">Copiado!</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="w-3 h-3 text-zinc-400" />
-                                <span>🔗 Copy Ad Link</span>
-                              </>
-                            )}
-                          </button>
-
-                          {/* Save to Swipe File */}
-                          <div className="flex items-center gap-1">
+                          {ad.mediaType === 'video' && (
                             <button
                               type="button"
-                              onClick={() => handleToggleSwipe(creative.id)}
-                              className={`w-32 flex items-center justify-center gap-1.5 px-2 py-1 rounded-lg border text-[11px] font-medium transition-all duration-200 cursor-pointer ${
-                                isSaved
-                                  ? 'border-lime-400 bg-lime-400/10 text-lime-400 font-bold shadow-sm shadow-lime-400/10'
-                                  : 'border-gray-700 bg-transparent hover:bg-zinc-800/60 hover:border-zinc-500 text-zinc-300'
-                              }`}
-                              title={isSaved ? "Remover do Swipe File" : "Salvar no Swipe File"}
+                              onClick={() => setPlayingCardId(prev => (prev === ad.id ? null : ad.id))}
+                              className="absolute inset-0 bg-black/30 flex items-center justify-center cursor-pointer"
+                              title="Reproduzir vídeo"
                             >
-                              <Bookmark 
-                                className={`w-3.5 h-3.5 transition-colors ${
-                                  isSaved ? 'text-lime-400 fill-lime-400' : 'text-zinc-400'
-                                }`} 
-                              />
-                              <span>{isSaved ? '💾 Salvo' : '💾 Save Swipe'}</span>
+                              <div className="w-11 h-11 rounded-full bg-black/80 border border-white/40 flex items-center justify-center backdrop-blur-xs group-hover/media:scale-110 group-hover/media:border-brand-neon transition-all shadow-xl">
+                                <Play className="w-5 h-5 text-brand-neon fill-brand-neon ml-0.5" />
+                              </div>
                             </button>
+                          )}
+                        </>
+                      )}
 
-                            {/* Remove ad button */}
-                            <button
-                              type="button"
-                              onClick={(e) => handleRemoveAd(creative.id, e)}
-                              className="p-1 text-zinc-600 hover:text-red-400 hover:bg-zinc-800 rounded transition-colors cursor-pointer"
-                              title="Remover anúncio"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                      {/* Download Floating Overlay Button */}
+                      <a
+                        href={ad.videoUrl || ad.thumbnailUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        download
+                        className="absolute top-2 right-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] px-2 py-1 rounded-lg flex items-center gap-1 shadow-lg transition-colors cursor-pointer z-10"
+                        title="Baixar criativo"
+                      >
+                        <Download className="w-3 h-3" />
+                        <span>Download</span>
+                      </a>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 text-[10px] text-zinc-400">
+                      <span className="font-mono truncate">{ad.targetDomain}</span>
+                      <span className="font-bold text-zinc-200 bg-zinc-800 px-1.5 py-0.5 rounded">
+                        {ad.ctaText}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Modal de Reprodução de Vídeo Direto */}
-      {playingCreative && (
+      {/* Modal de Detalhes e Player de Vídeo em Alta Resolução */}
+      {playingVideoAd && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn"
-          onClick={() => setPlayingCreative(null)}
+          onClick={() => setPlayingVideoAd(null)}
         >
           <div
-            className="bg-brand-sidebar border border-brand-border rounded-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto shadow-2xl text-white p-6 space-y-4"
+            className="bg-brand-sidebar border border-brand-border rounded-2xl max-w-4xl w-full max-h-[92vh] overflow-y-auto shadow-2xl text-white p-6 space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-brand-border pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-brand-neon animate-pulse" />
-                <h3 className="text-sm font-bold text-white truncate max-w-lg">
-                  {playingCreative.adTitle}
-                </h3>
+            <div className="flex items-center justify-between border-b border-brand-border pb-4">
+              <div className="flex items-center gap-3">
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Anúncio Ativo</span>
+                </div>
+                <span className="text-xs text-zinc-400 font-mono">
+                  ID da Biblioteca: {playingVideoAd.libraryId}
+                </span>
               </div>
               <button
                 type="button"
-                onClick={() => setPlayingCreative(null)}
+                onClick={() => setPlayingVideoAd(null)}
                 className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Video Box */}
-            <div className="relative rounded-2xl overflow-hidden bg-black aspect-video border border-zinc-800 flex items-center justify-center shadow-2xl">
-              <video
-                src={playingCreative.videoUrl || 'https://assets.mixkit.co/videos/preview/mixkit-beautician-massaging-a-womans-face-in-a-spa-42898-large.mp4'}
-                poster={playingCreative.thumbnailUrl}
-                controls
-                autoPlay
-                className="w-full h-full object-contain"
-              />
-            </div>
-
-            {/* Action Bar */}
-            <div className="flex items-center justify-between pt-2 text-xs">
-              <div className="flex items-center gap-2 text-zinc-400">
-                <span>Concorrente: <strong className="text-white">{playingCreative.competitor.name}</strong></span>
-                <span>•</span>
-                <span>Início: <strong className="text-zinc-200">{playingCreative.startDate}</strong></span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+              {/* Real Video Player Box */}
+              <div className="relative rounded-2xl overflow-hidden bg-black aspect-[4/5] border border-zinc-800 flex items-center justify-center shadow-xl">
+                {playingVideoAd.mediaType === 'video' && playingVideoAd.videoUrl ? (
+                  <video
+                    src={playingVideoAd.videoUrl}
+                    poster={playingVideoAd.thumbnailUrl}
+                    controls
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <img
+                    src={playingVideoAd.thumbnailUrl}
+                    alt="Full Media Preview"
+                    className="w-full h-full object-cover"
+                  />
+                )}
               </div>
 
-              <div className="flex items-center gap-2">
-                <a
-                  href={playingCreative.videoUrl || 'https://assets.mixkit.co/videos/preview/mixkit-beautician-massaging-a-womans-face-in-a-spa-42898-large.mp4'}
-                  target="_blank"
-                  rel="noreferrer"
-                  download
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-md"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download MP4</span>
-                </a>
+              {/* Ad Info & Copy */}
+              <div className="space-y-4 flex flex-col justify-between h-full">
+                <div className="space-y-3">
+                  <div className="bg-brand-card border border-brand-border rounded-xl p-4 space-y-2">
+                    <span className="text-[10px] font-bold uppercase text-brand-neon">Texto do Anúncio (Copy)</span>
+                    <p className="text-xs text-zinc-200 leading-relaxed whitespace-pre-line select-text">
+                      {playingVideoAd.adCopy}
+                    </p>
+                  </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleToggleSwipe(playingCreative.id)}
-                  className={`px-3 py-1.5 rounded-xl font-bold border flex items-center gap-1.5 cursor-pointer ${
-                    savedSwipes.includes(playingCreative.id)
-                      ? 'border-lime-400 bg-lime-400/15 text-lime-400'
-                      : 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:text-white'
-                  }`}
-                >
-                  <Bookmark className={`w-3.5 h-3.5 ${savedSwipes.includes(playingCreative.id) ? 'fill-lime-400 text-lime-400' : ''}`} />
-                  <span>{savedSwipes.includes(playingCreative.id) ? 'Salvo no Swipe' : 'Salvar no Swipe'}</span>
-                </button>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-brand-card/70 border border-brand-border rounded-xl p-3">
+                      <span className="text-[10px] text-zinc-400 block font-semibold uppercase">Formato</span>
+                      <span className="font-bold text-white uppercase">{playingVideoAd.mediaType}</span>
+                    </div>
+                    <div className="bg-brand-card/70 border border-brand-border rounded-xl p-3">
+                      <span className="text-[10px] text-zinc-400 block font-semibold uppercase">Classificação</span>
+                      <span className={`font-bold ${playingVideoAd.classification === 'ESCALADO' ? 'text-orange-400' : 'text-zinc-300'}`}>
+                        {playingVideoAd.classification}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-4 border-t border-brand-border">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleSwipe(playingVideoAd.id)}
+                    className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      savedSwipes.includes(playingVideoAd.id)
+                        ? 'bg-lime-400/15 border border-lime-400 text-lime-400 shadow-md'
+                        : 'bg-brand-neon hover:bg-brand-neonHover text-black font-extrabold shadow-md shadow-brand-neon/20'
+                    }`}
+                  >
+                    <Bookmark className={`w-4 h-4 ${savedSwipes.includes(playingVideoAd.id) ? 'fill-lime-400' : 'fill-black'}`} />
+                    <span>{savedSwipes.includes(playingVideoAd.id) ? 'SALVO NO SWIPE FILE' : 'SALVAR NO SWIPE FILE'}</span>
+                  </button>
+
+                  <a
+                    href={playingVideoAd.videoUrl || playingVideoAd.thumbnailUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    download
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Baixar Vídeo (MP4)</span>
+                  </a>
+                </div>
               </div>
             </div>
           </div>
