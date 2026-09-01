@@ -8,7 +8,8 @@ import {
   Link2, 
   Settings,
   LogOut,
-  CheckSquare
+  CheckSquare,
+  UserCheck
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -98,7 +99,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                   : 'text-zinc-300 hover:bg-zinc-800/60 hover:text-white'
               }`}
             >
-              <Users className="w-4 h-4 shrink-0" />
+              <UserCheck className="w-4 h-4 shrink-0" />
               {!isCollapsed && <span>Leads</span>}
             </button>
 
@@ -128,6 +129,20 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
             >
               <CheckSquare className="w-4 h-4 shrink-0" />
               {!isCollapsed && <span>Auditoria SMM</span>}
+            </button>
+
+            {/* Equipe & OKRs Button */}
+            <button
+              onClick={() => setActiveTab('equipe-okrs')}
+              title={isCollapsed ? 'Equipe & OKRs' : undefined}
+              className={`w-full flex items-center ${isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'} rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'equipe-okrs'
+                  ? 'bg-brand-neon text-black font-bold shadow-md shadow-brand-neon/20'
+                  : 'text-zinc-300 hover:bg-zinc-800/60 hover:text-white'
+              }`}
+            >
+              <Users className="w-4 h-4 shrink-0" />
+              {!isCollapsed && <span>Equipe & OKRs</span>}
             </button>
 
             {/* Integrações Meta Button */}

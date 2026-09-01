@@ -7,6 +7,7 @@ import { IntegrationsView } from './components/IntegrationsView';
 import { CrmLeadsView } from './components/CrmLeadsView';
 import { CreativesView } from './components/CreativesView';
 import { SmmAuditView } from './components/SmmAuditView';
+import { TeamOkrView } from './components/TeamOkrView';
 import { MetaDebugModal } from './components/MetaDebugModal';
 import { 
   getSavedMetaConfig, 
@@ -48,7 +49,7 @@ export function App() {
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'gerenciador' | 'mineracao' | 'leads' | 'criativos' | 'integracoes' | 'smm-audit'>('gerenciador');
+  const [activeTab, setActiveTab] = useState<'gerenciador' | 'mineracao' | 'leads' | 'criativos' | 'integracoes' | 'smm-audit' | 'equipe-okrs'>('gerenciador');
   const [activeLevel, setActiveLevel] = useState<string>('campanhas');
   const [metaConfig, setMetaConfig] = useState<MetaConfig>(getSavedMetaConfig());
   const [accounts, setAccounts] = useState<MetaAdAccount[]>([]);
@@ -347,6 +348,10 @@ export function App() {
 
           {activeTab === 'smm-audit' && (
             <SmmAuditView />
+          )}
+
+          {activeTab === 'equipe-okrs' && (
+            <TeamOkrView />
           )}
 
           {activeTab === 'integracoes' && (
