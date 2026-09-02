@@ -98,7 +98,7 @@ export const AddSmmClientModal: React.FC<AddSmmClientModalProps> = React.memo(({
       let saved: SmmMonitoredClient;
 
       if (isEditing && clientToEdit) {
-        saved = updateMonitoredClient({
+        saved = await updateMonitoredClient({
           id: clientToEdit.id,
           clientName: clientName.trim(),
           instagramInput: instagramInput.trim(),
@@ -106,7 +106,7 @@ export const AddSmmClientModal: React.FC<AddSmmClientModalProps> = React.memo(({
           isActive: clientToEdit.isActive
         });
       } else {
-        saved = saveMonitoredClient({
+        saved = await saveMonitoredClient({
           clientName: clientName.trim(),
           instagramInput: instagramInput.trim(),
           avatarUrl: finalAvatar,

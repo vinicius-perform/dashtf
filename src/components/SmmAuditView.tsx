@@ -20,11 +20,13 @@ import {
   Key,
   ShieldCheck,
   AlertCircle,
-  Pencil
+  Pencil,
+  Upload
 } from 'lucide-react';
 import { DateRangePicker, DateRange } from './DateRangePicker';
 import { getYesterdayRange } from '../utils/timezone';
 import { AddSmmClientModal } from './AddSmmClientModal';
+import { AddSmmClientBulkModal } from './AddSmmClientBulkModal';
 import { SmmSettingsModal } from './SmmSettingsModal';
 import { InstagramAvatar } from './InstagramAvatar';
 import { 
@@ -42,7 +44,8 @@ import {
 } from '../services/instagramScraperService';
 
 export const SmmAuditView: React.FC = () => {
-  const [clients, setClients] = useState<SmmMonitoredClient[]>(() => getMonitoredClients());
+  const [clients, setClients] = useState<SmmMonitoredClient[]>([]);
+  const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [auditData, setAuditData] = useState<SmmClientAudit[]>(() => getSavedAuditData());
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OK' | 'PENDING'>('ALL');
@@ -55,17 +58,29 @@ export const SmmAuditView: React.FC = () => {
   const [isAuditing, setIsAuditing] = useState(false);
   const [auditingClientId, setAuditingClientId] = useState<string | null>(null);
   const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [clientToEdit, setClientToEdit] = useState<SmmMonitoredClient | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [selectedAuditPost, setSelectedAuditPost] = useState<SmmClientAudit | null>(null);
   const [hasToken, setHasToken] = useState<boolean>(() => Boolean(getApifyToken()));
 
-  // Reload clients from storage
-  const reloadClients = useCallback(() => {
-    const loaded = getMonitoredClients();
-    setClients(loaded);
-    setHasToken(Boolean(getApifyToken()));
+  // Reload clients from Supabase
+  const reloadClients = useCallback(async () => {
+    setIsLoadingClients(true);
+    try {
+      const loaded = await getMonitoredClients();
+      setClients(loaded);
+      setHasToken(Boolean(getApifyToken()));
+    } catch (err) {
+      console.error('Erro ao buscar clientes no Supabase:', err);
+    } finally {
+      setIsLoadingClients(false);
+    }
   }, []);
+
+  useEffect(() => {
+    reloadClients();
+  }, [reloadClients]);
 
   // Merge clients with their latest audit record
   const clientAudits = useMemo(() => {
@@ -177,11 +192,16 @@ export const SmmAuditView: React.FC = () => {
   };
 
   // Delete client
-  const handleDeleteClient = (clientAudit: SmmClientAudit) => {
+  const handleDeleteClient = async (clientAudit: SmmClientAudit) => {
     if (window.confirm(`Tem certeza que deseja remover o cliente "${clientAudit.clientName}" do monitoramento?`)) {
-      deleteMonitoredClient(clientAudit.clientId);
-      reloadClients();
-      setAuditData(getSavedAuditData());
+      try {
+        await deleteMonitoredClient(clientAudit.clientId);
+        setClients(prev => prev.filter(c => c.id !== clientAudit.clientId));
+        setAuditData(getSavedAuditData());
+      } catch (err: any) {
+        console.error('Erro ao excluir cliente:', err);
+        alert(`Erro ao excluir cliente: ${err?.message || 'Falha de conexão com Supabase'}`);
+      }
     }
   };
 
@@ -196,7 +216,13 @@ export const SmmAuditView: React.FC = () => {
 
   // Handler when a client is added or updated
   const handleClientSaved = (savedClient: SmmMonitoredClient) => {
-    reloadClients();
+    setClients(prev => {
+      const exists = prev.some(c => c.id === savedClient.id);
+      if (exists) {
+        return prev.map(c => c.id === savedClient.id ? savedClient : c);
+      }
+      return [savedClient, ...prev];
+    });
     setAuditData(getSavedAuditData());
     // Trigger immediate single audit for this client
     auditSingleClient(savedClient, dateRange).then(result => {
@@ -206,7 +232,20 @@ export const SmmAuditView: React.FC = () => {
         saveAuditData(next);
         return next;
       });
+    }).catch(err => {
+      console.error('Erro ao auditar cliente recém-salvo:', err);
     });
+  };
+
+  // Handler when bulk clients are imported
+  const handleBulkClientsSaved = (savedClients: SmmMonitoredClient[]) => {
+    setClients(prev => {
+      const existingIds = new Set(prev.map(c => c.id));
+      const newItems = savedClients.filter(c => !existingIds.has(c.id));
+      return [...newItems, ...prev];
+    });
+    setAuditData(getSavedAuditData());
+    reloadClients();
   };
 
   return (
@@ -216,31 +255,32 @@ export const SmmAuditView: React.FC = () => {
         <div className="space-y-1">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-xl bg-brand-neon/10 border border-brand-neon/30 flex items-center justify-center text-brand-neon shadow-inner">
-              <CheckSquare className="w-5 h-5" />
+              <Instagram className="w-5 h-5 text-brand-neon" />
             </div>
             <div>
-              <h1 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
-                Auditoria SMM
-                <span className="text-xs bg-zinc-800 text-zinc-300 font-bold px-2.5 py-0.5 rounded-full border border-zinc-700">
-                  Apify Scraper Engine
+              <h2 className="text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
+                <span>Auditoria SMM</span>
+                <span className="text-[10px] uppercase font-mono px-2 py-0.5 bg-brand-neon/10 text-brand-neon rounded-full border border-brand-neon/20">
+                  Instagram Monitor
                 </span>
-              </h1>
+              </h2>
               <p className="text-xs text-zinc-400">
-                Monitoramento automatizado de postagens no feed e stories dos clientes gerenciados.
+                Auditoria automatizada de entregas (Feed, Reels e Stories) de clientes no Instagram
               </p>
             </div>
           </div>
         </div>
 
+        {/* Header Right Actions */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Botão Configurar Token */}
+          {/* Botão Configurações Apify */}
           <button
             type="button"
             onClick={() => setIsSettingsModalOpen(true)}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-sm ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-sm active:scale-95 ${
               hasToken 
-                ? 'bg-zinc-800/80 text-zinc-300 border-zinc-700 hover:text-white hover:bg-zinc-700' 
-                : 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' 
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
             }`}
             title="Configurações do Apify Token"
           >
@@ -250,6 +290,17 @@ export const SmmAuditView: React.FC = () => {
               <Key className="w-4 h-4 text-amber-400" />
             )}
             <span>{hasToken ? 'Apify Conectado' : 'Configurar Token Apify'}</span>
+          </button>
+
+          {/* Botão Importar em Lote (Bulk Add) */}
+          <button
+            type="button"
+            onClick={() => setIsBulkModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-850 hover:bg-zinc-800 text-zinc-200 hover:text-white text-xs font-bold border border-zinc-700/80 transition-all cursor-pointer shadow-sm active:scale-95 group"
+            title="Importar múltiplos clientes através de lista de texto"
+          >
+            <Upload className="w-3.5 h-3.5 text-brand-neon group-hover:scale-110 transition-transform" />
+            <span>Importar em Lote</span>
           </button>
 
           {/* Botão + Cadastrar Cliente */}
@@ -402,161 +453,158 @@ export const SmmAuditView: React.FC = () => {
 
       {/* 4. Tabela de Monitoramento */}
       <div className="bg-brand-card border border-brand-border rounded-2xl shadow-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-brand-border bg-brand-sidebar/80 text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-                <th className="py-3.5 px-5">Cliente</th>
-                <th className="py-3.5 px-5">Feed</th>
-                <th className="py-3.5 px-5">Story</th>
-                <th className="py-3.5 px-5 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-brand-border/60 text-xs">
-              {filteredData.map((row) => {
-                const isSuccess = row.status === 'OK';
-                const isRowAuditing = auditingClientId === row.clientId;
+        {isLoadingClients ? (
+          <div className="p-16 text-center flex flex-col items-center justify-center space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-brand-neon/10 border border-brand-neon/30 flex items-center justify-center text-brand-neon shadow-inner">
+              <RefreshCw className="w-6 h-6 text-brand-neon animate-spin" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-extrabold text-white">
+                Carregando clientes do Supabase...
+              </p>
+              <p className="text-xs text-zinc-400">
+                Sincronizando contas do Instagram monitoradas em tempo real.
+              </p>
+            </div>
+          </div>
+        ) : filteredData.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-brand-border bg-brand-sidebar/80 text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                  <th className="py-3.5 px-5">Cliente</th>
+                  <th className="py-3.5 px-5">Feed</th>
+                  <th className="py-3.5 px-5 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-brand-border/60 text-xs">
+                {filteredData.map((row) => {
+                  const isSuccess = row.status === 'OK';
+                  const isRowAuditing = auditingClientId === row.clientId;
 
-                return (
-                  <tr 
-                    key={row.clientId || row.id}
-                    className="hover:bg-zinc-850/60 transition-colors group"
-                  >
-                    {/* Coluna 1: Cliente & @Handle */}
-                    <td className="py-4 px-5">
-                      <div className="flex items-center gap-3">
-                        <InstagramAvatar
-                          avatarUrl={row.avatarUrl}
-                          handle={row.handle}
-                          name={row.clientName}
-                          size="md"
-                        />
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-extrabold text-white text-sm group-hover:text-brand-neon transition-colors truncate">
-                            {row.clientName}
-                          </span>
-                          <a
-                            href={row.postUrl || `https://instagram.com/${row.handle.replace('@', '')}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-zinc-400 hover:text-pink-400 text-[11px] font-mono flex items-center gap-1 transition-colors"
-                          >
-                            <Instagram className="w-3 h-3 text-pink-400" />
-                            {row.handle}
-                          </a>
+                  return (
+                    <tr 
+                      key={row.clientId || row.id}
+                      className="hover:bg-zinc-850/60 transition-colors group"
+                    >
+                      {/* Coluna 1: Cliente & @Handle */}
+                      <td className="py-4 px-5">
+                        <div className="flex items-center gap-3">
+                          <InstagramAvatar
+                            avatarUrl={row.avatarUrl}
+                            handle={row.handle}
+                            name={row.clientName}
+                            size="md"
+                          />
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-extrabold text-white text-sm group-hover:text-brand-neon transition-colors truncate">
+                              {row.clientName}
+                            </span>
+                            <a
+                              href={`https://instagram.com/${row.handle.replace(/^@+/, '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-zinc-400 hover:text-pink-400 text-[11px] font-mono flex items-center gap-1 transition-colors"
+                            >
+                              <Instagram className="w-3 h-3 text-pink-400" />
+                              {row.handle}
+                            </a>
+                          </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Coluna 2: Feed (SLA de Recência) */}
-                    <td className="py-4 px-5 whitespace-nowrap">
-                      {(() => {
-                        const sla = getRecencySla(row.feedTimestamp, row.postTime, row.hasFeedPost, 'FEED');
-                        return (
-                          <div>
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-xs shadow-xs border ${sla.badgeClass}`}>
-                              {sla.status === 'GREEN' && <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />}
-                              {sla.status === 'ORANGE' && <Clock className="w-3.5 h-3.5 stroke-[2.5]" />}
-                              {sla.status === 'RED' && <AlertTriangle className="w-3.5 h-3.5 stroke-[2.5]" />}
-                              <span>{sla.badgeText}</span>
-                            </span>
-                            <div className="text-[10px] text-zinc-400 font-mono mt-1 flex items-center gap-1">
-                              <Clock className="w-2.5 h-2.5 text-zinc-500" />
-                              <span>{sla.timeSubtitle}</span>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </td>
+                      {/* Coluna 2: Feed (SLA de Recência com Link Clicável) */}
+                      <td className="py-4 px-5 whitespace-nowrap">
+                        {(() => {
+                          const sla = getRecencySla(row.feedTimestamp, row.postTime, row.hasFeedPost, 'FEED');
+                          const feedUrl = row.postUrl || `https://instagram.com/${row.handle.replace(/^@+/, '')}`;
+                          return (
+                            <a
+                              href={feedUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="group inline-block cursor-pointer hover:opacity-80 transition-all"
+                              title="Abrir publicação no Instagram"
+                            >
+                              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-xs shadow-xs border ${sla.badgeClass}`}>
+                                {sla.status === 'GREEN' && <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />}
+                                {sla.status === 'ORANGE' && <Clock className="w-3.5 h-3.5 stroke-[2.5]" />}
+                                {sla.status === 'RED' && <AlertTriangle className="w-3.5 h-3.5 stroke-[2.5]" />}
+                                <span>{sla.badgeText}</span>
+                                <ExternalLink className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 transition-opacity ml-0.5" />
+                              </span>
+                              <div className="text-[10px] text-zinc-400 font-mono mt-1 flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5 text-zinc-500" />
+                                <span>{sla.timeSubtitle}</span>
+                              </div>
+                            </a>
+                          );
+                        })()}
+                      </td>
 
-                    {/* Coluna 3: Story (SLA de Recência) */}
-                    <td className="py-4 px-5 whitespace-nowrap">
-                      {(() => {
-                        const sla = getRecencySla(row.storyTimestamp, row.storyTime, row.hasStoryPost, 'STORY');
-                        return (
-                          <div>
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-xs shadow-xs border ${sla.badgeClass}`}>
-                              {sla.status === 'GREEN' && <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />}
-                              {sla.status === 'ORANGE' && <Clock className="w-3.5 h-3.5 stroke-[2.5]" />}
-                              {sla.status === 'RED' && <AlertTriangle className="w-3.5 h-3.5 stroke-[2.5]" />}
-                              <span>{sla.badgeText}</span>
-                            </span>
-                            <div className="text-[10px] text-zinc-400 font-mono mt-1 flex items-center gap-1">
-                              <Clock className="w-2.5 h-2.5 text-zinc-500" />
-                              <span>{sla.timeSubtitle}</span>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </td>
-
-                    {/* Coluna 4: Ações */}
-                    <td className="py-4 px-5 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {/* Ver Postagem */}
-                        <button
-                          type="button"
-                          onClick={() => setSelectedAuditPost(row)}
-                          className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700 transition-colors cursor-pointer"
-                          title="Visualizar detalhes da entrega"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-
-                        {/* Editar Cliente */}
-                        <button
-                          type="button"
-                          onClick={() => handleEditClient(row)}
-                          className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-brand-neon border border-zinc-700 transition-colors cursor-pointer"
-                          title="Editar cliente e foto do Instagram"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-
-                        {/* Re-auditar apenas esse cliente */}
-                        <button
-                          type="button"
-                          onClick={() => handleAuditSingle(row)}
-                          disabled={isRowAuditing || isAuditing}
-                          className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-brand-neon hover:text-white border border-zinc-700 transition-colors cursor-pointer disabled:opacity-50"
-                          title="Verificar Instagram deste cliente agora"
-                        >
-                          <RefreshCw className={`w-3.5 h-3.5 ${isRowAuditing ? 'animate-spin' : ''}`} />
-                        </button>
-
-                        {/* Link do Instagram */}
-                        {row.postUrl && (
-                          <a
-                            href={row.postUrl}
-                            target="_blank"
-                            rel="noreferrer"
+                      {/* Coluna 3: Ações */}
+                      <td className="py-4 px-5 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Ver Postagem */}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedAuditPost(row)}
                             className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700 transition-colors cursor-pointer"
-                            title="Abrir Instagram oficial"
+                            title="Visualizar detalhes da entrega"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Editar Cliente */}
+                          <button
+                            type="button"
+                            onClick={() => handleEditClient(row)}
+                            className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-brand-neon border border-zinc-700 transition-colors cursor-pointer"
+                            title="Editar cliente e foto do Instagram"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Re-auditar apenas esse cliente */}
+                          <button
+                            type="button"
+                            onClick={() => handleAuditSingle(row)}
+                            disabled={isRowAuditing || isAuditing}
+                            className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-brand-neon hover:text-white border border-zinc-700 transition-colors cursor-pointer disabled:opacity-50"
+                            title="Verificar Instagram deste cliente agora"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${isRowAuditing ? 'animate-spin' : ''}`} />
+                          </button>
+
+                          {/* Link do Perfil no Instagram */}
+                          <a
+                            href={`https://instagram.com/${row.handle.replace(/^@+/, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700 transition-colors cursor-pointer"
+                            title="Abrir perfil no Instagram"
                           >
                             <ExternalLink className="w-3.5 h-3.5 text-zinc-400 hover:text-brand-neon transition-colors" />
                           </a>
-                        )}
 
-                        {/* Excluir Cliente */}
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteClient(row)}
-                          className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors cursor-pointer"
-                          title="Remover cliente do monitoramento"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Empty State */}
-        {filteredData.length === 0 && (
+                          {/* Excluir Cliente */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteClient(row)}
+                            className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors cursor-pointer"
+                            title="Remover cliente do monitoramento"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
           <div className="p-16 text-center flex flex-col items-center justify-center space-y-4">
             <div className="w-14 h-14 rounded-2xl bg-zinc-800/80 border border-zinc-700/80 flex items-center justify-center text-zinc-500 shadow-inner">
               <Instagram className="w-7 h-7 text-pink-400" />
@@ -644,28 +692,6 @@ export const SmmAuditView: React.FC = () => {
               )}
             </div>
 
-            {/* Status dos Stories */}
-            <div className="space-y-2 bg-brand-card border border-brand-border rounded-xl p-3.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase text-brand-neon tracking-wider flex items-center gap-1.5">
-                  <Instagram className="w-3.5 h-3.5 text-brand-neon" />
-                  Entrega nos Stories
-                </span>
-                <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
-                  selectedAuditPost.hasStoryPost
-                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                    : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                }`}>
-                  {selectedAuditPost.storyTypeLabel || (selectedAuditPost.hasStoryPost ? 'Story Postado' : 'Sem Story')}
-                </span>
-              </div>
-              {selectedAuditPost.hasStoryPost && selectedAuditPost.storyTime && (
-                <div className="text-[11px] text-zinc-400">
-                  Último story identificado às {selectedAuditPost.storyTime}
-                </div>
-              )}
-            </div>
-
             <div className="pt-2 border-t border-brand-border flex items-center justify-end gap-2">
               <button
                 type="button"
@@ -701,7 +727,14 @@ export const SmmAuditView: React.FC = () => {
         clientToEdit={clientToEdit}
       />
 
-      {/* 7. Modal de Configuração do Scraper */}
+      {/* 7. Modal de Cadastro em Massa (Bulk Add) */}
+      <AddSmmClientBulkModal
+        isOpen={isBulkModalOpen}
+        onClose={() => setIsBulkModalOpen(false)}
+        onClientsSaved={handleBulkClientsSaved}
+      />
+
+      {/* 8. Modal de Configuração do Scraper */}
       <SmmSettingsModal
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}

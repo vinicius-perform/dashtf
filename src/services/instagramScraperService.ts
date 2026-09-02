@@ -1,4 +1,5 @@
 import { DateRange } from '../components/DateRangePicker';
+import { supabase } from '../lib/supabase';
 
 export interface SmmMonitoredClient {
   id: string;
@@ -142,7 +143,6 @@ export function getRecencySla(
   };
 }
 
-const CLIENTS_STORAGE_KEY = 'smm_monitored_clients';
 const AUDIT_STORAGE_KEY = 'smm_audit_data';
 const APIFY_TOKEN_KEY = 'smm_apify_api_token';
 
@@ -171,78 +171,229 @@ export function cleanInstagramHandle(input: string): { handle: string; cleanHand
 }
 
 /**
- * Retorna a lista de clientes monitorados salvos no localStorage
+ * Mapeador de linha do banco de dados (suporta camelCase e snake_case)
  */
-export function getMonitoredClients(): SmmMonitoredClient[] {
+export function mapDbRowToClient(row: any): SmmMonitoredClient {
+  return {
+    id: String(row.id),
+    clientName: row.clientName || row.client_name || '',
+    handle: row.handle || '',
+    instagramUrl: row.instagramUrl || row.instagram_url || '',
+    avatarUrl: row.avatarUrl || row.avatar_url || undefined,
+    isActive: row.isActive !== undefined ? Boolean(row.isActive) : (row.is_active !== undefined ? Boolean(row.is_active) : true),
+    createdAt: row.createdAt || row.created_at || new Date().toISOString()
+  };
+}
+
+/**
+ * Retorna a lista de clientes monitorados salvos no Supabase
+ */
+export async function getMonitoredClients(): Promise<SmmMonitoredClient[]> {
   try {
-    const saved = localStorage.getItem(CLIENTS_STORAGE_KEY);
-    if (!saved) return [];
-    return JSON.parse(saved);
+    const { data, error } = await supabase
+      .from('smm_clients')
+      .select('*')
+      .order('createdAt', { ascending: false });
+
+    if (error) {
+      // Fallback para caso as colunas tenham sido criadas em snake_case no Supabase
+      if (error.message?.includes('createdAt') || error.code === '42703') {
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('smm_clients')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!fallbackError && fallbackData) {
+          return fallbackData.map(mapDbRowToClient);
+        }
+      }
+      console.error('Erro ao ler clientes monitorados do Supabase:', error);
+      return [];
+    }
+
+    return (data || []).map(mapDbRowToClient);
   } catch (err) {
-    console.error('Erro ao ler clientes monitorados:', err);
+    console.error('Erro de conexão com Supabase ao ler clientes:', err);
     return [];
   }
 }
 
 /**
- * Salva um novo cliente monitorado
+ * Salva um novo cliente monitorado no Supabase
  */
-export function saveMonitoredClient(clientInput: {
+export async function saveMonitoredClient(clientInput: {
   clientName: string;
   instagramInput: string;
   avatarUrl?: string;
   isActive?: boolean;
-}): SmmMonitoredClient {
+}): Promise<SmmMonitoredClient> {
   const { handle, url } = cleanInstagramHandle(clientInput.instagramInput);
   
-  const newClient: SmmMonitoredClient = {
+  const payload = {
     id: `client_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
     clientName: clientInput.clientName.trim(),
     handle: handle || clientInput.instagramInput.trim(),
     instagramUrl: url || clientInput.instagramInput.trim(),
-    avatarUrl: clientInput.avatarUrl?.trim() || undefined,
+    avatarUrl: clientInput.avatarUrl?.trim() || null,
     isActive: clientInput.isActive ?? true,
     createdAt: new Date().toISOString()
   };
 
-  const existing = getMonitoredClients();
-  const updated = [newClient, ...existing];
-  localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(updated));
+  const { data, error } = await supabase
+    .from('smm_clients')
+    .insert([payload])
+    .select()
+    .single();
 
-  return newClient;
+  if (error) {
+    // Tenta fallback com snake_case caso a tabela tenha colunas snake_case
+    if (error.code === '42703') {
+      const snakePayload = {
+        id: payload.id,
+        client_name: payload.clientName,
+        handle: payload.handle,
+        instagram_url: payload.instagramUrl,
+        avatar_url: payload.avatarUrl,
+        is_active: payload.isActive,
+        created_at: payload.createdAt
+      };
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('smm_clients')
+        .insert([snakePayload])
+        .select()
+        .single();
+
+      if (!fallbackError && fallbackData) {
+        return mapDbRowToClient(fallbackData);
+      }
+    }
+    console.error('Erro ao salvar cliente monitorado no Supabase:', error);
+    throw new Error(`Falha ao salvar no banco de dados: ${error.message}`);
+  }
+
+  return mapDbRowToClient(data || payload);
 }
 
 /**
- * Atualiza os dados de um cliente monitorado existente
+ * Salva múltiplos clientes monitorados em lote no Supabase (Bulk Insert)
  */
-export function updateMonitoredClient(clientInput: {
+export async function saveBulkMonitoredClients(clientsList: Array<{
+  clientName: string;
+  instagramInput: string;
+  avatarUrl?: string;
+  isActive?: boolean;
+}>): Promise<SmmMonitoredClient[]> {
+  if (!clientsList || clientsList.length === 0) return [];
+
+  const payloads = clientsList.map((c, index) => {
+    const { handle, url, cleanHandle } = cleanInstagramHandle(c.instagramInput);
+    const finalAvatar = c.avatarUrl?.trim() || (cleanHandle ? `https://unavatar.io/instagram/${cleanHandle}` : null);
+    
+    return {
+      id: `client_${Date.now()}_${index}_${Math.random().toString(36).substring(2, 7)}`,
+      clientName: c.clientName.trim(),
+      handle: handle || (cleanHandle ? `@${cleanHandle}` : c.instagramInput.trim()),
+      instagramUrl: url || (cleanHandle ? `https://instagram.com/${cleanHandle}` : c.instagramInput.trim()),
+      avatarUrl: finalAvatar,
+      isActive: c.isActive ?? true,
+      createdAt: new Date().toISOString()
+    };
+  });
+
+  const { data, error } = await supabase
+    .from('smm_clients')
+    .insert(payloads)
+    .select();
+
+  if (error) {
+    // Fallback para caso as colunas estejam em snake_case no Supabase
+    if (error.code === '42703' || error.message?.includes('clientName') || error.message?.includes('column')) {
+      const snakePayloads = payloads.map(p => ({
+        id: p.id,
+        client_name: p.clientName,
+        handle: p.handle,
+        instagram_url: p.instagramUrl,
+        avatar_url: p.avatarUrl,
+        is_active: p.isActive,
+        created_at: p.createdAt
+      }));
+
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('smm_clients')
+        .insert(snakePayloads)
+        .select();
+
+      if (!fallbackError && fallbackData) {
+        return fallbackData.map(mapDbRowToClient);
+      }
+    }
+    console.error('Erro no bulk insert de clientes no Supabase:', error);
+    throw new Error(`Falha ao importar em lote: ${error.message}`);
+  }
+
+  return (data || payloads).map(mapDbRowToClient);
+}
+
+/**
+ * Atualiza os dados de um cliente monitorado existente no Supabase
+ */
+export async function updateMonitoredClient(clientInput: {
   id: string;
   clientName: string;
   instagramInput: string;
   avatarUrl?: string;
   isActive?: boolean;
-}): SmmMonitoredClient {
+}): Promise<SmmMonitoredClient> {
   const { handle, url } = cleanInstagramHandle(clientInput.instagramInput);
-  const existing = getMonitoredClients();
   
-  const current = existing.find(c => c.id === clientInput.id);
-  if (!current) {
-    throw new Error('Cliente não encontrado para atualização.');
-  }
-
-  const updatedClient: SmmMonitoredClient = {
-    ...current,
+  const payload: Record<string, any> = {
     clientName: clientInput.clientName.trim(),
     handle: handle || clientInput.instagramInput.trim(),
     instagramUrl: url || clientInput.instagramInput.trim(),
-    avatarUrl: clientInput.avatarUrl?.trim() || undefined,
-    isActive: clientInput.isActive ?? current.isActive
+    avatarUrl: clientInput.avatarUrl?.trim() || null
   };
 
-  const updatedList = existing.map(c => c.id === clientInput.id ? updatedClient : c);
-  localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(updatedList));
+  if (clientInput.isActive !== undefined) {
+    payload.isActive = clientInput.isActive;
+  }
 
-  // Atualiza também os registros de auditoria salvos com o novo nome/handle/avatar
+  const { data, error } = await supabase
+    .from('smm_clients')
+    .update(payload)
+    .eq('id', clientInput.id)
+    .select()
+    .single();
+
+  if (error) {
+    // Fallback snake_case
+    if (error.code === '42703') {
+      const snakePayload: Record<string, any> = {
+        client_name: payload.clientName,
+        handle: payload.handle,
+        instagram_url: payload.instagramUrl,
+        avatar_url: payload.avatarUrl
+      };
+      if (clientInput.isActive !== undefined) {
+        snakePayload.is_active = clientInput.isActive;
+      }
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('smm_clients')
+        .update(snakePayload)
+        .eq('id', clientInput.id)
+        .select()
+        .single();
+
+      if (!fallbackError && fallbackData) {
+        return mapDbRowToClient(fallbackData);
+      }
+    }
+    console.error('Erro ao atualizar cliente monitorado no Supabase:', error);
+    throw new Error(`Falha ao atualizar no banco de dados: ${error.message}`);
+  }
+
+  const updatedClient = mapDbRowToClient(data);
+
+  // Atualiza também os registros de auditoria em cache local
   try {
     const audits = getSavedAuditData();
     const updatedAudits = audits.map(a => {
@@ -266,21 +417,57 @@ export function updateMonitoredClient(clientInput: {
 }
 
 /**
- * Exclui um cliente monitorado
+ * Exclui um cliente monitorado do Supabase
  */
-export function deleteMonitoredClient(clientId: string): void {
-  const existing = getMonitoredClients();
-  const updated = existing.filter(c => c.id !== clientId);
-  localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(updated));
+export async function deleteMonitoredClient(clientId: string): Promise<void> {
+  const { error } = await supabase
+    .from('smm_clients')
+    .delete()
+    .eq('id', clientId);
 
-  // Limpa também as auditorias desse cliente
+  if (error) {
+    console.error('Erro ao excluir cliente monitorado do Supabase:', error);
+    throw new Error(`Falha ao excluir no banco de dados: ${error.message}`);
+  }
+
+  // Limpa também as auditorias desse cliente em cache local
   try {
     const audits = getSavedAuditData();
     const updatedAudits = audits.filter(a => a.clientId !== clientId);
-    localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(updatedAudits));
+    saveAuditData(updatedAudits);
   } catch (e) {
     console.error('Erro ao limpar auditorias do cliente excluído:', e);
   }
+}
+
+/**
+ * Alterna status ativo/inativo de um cliente monitorado no Supabase
+ */
+export async function toggleMonitoredClientStatus(clientId: string, newStatus: boolean): Promise<SmmMonitoredClient> {
+  const { data, error } = await supabase
+    .from('smm_clients')
+    .update({ isActive: newStatus })
+    .eq('id', clientId)
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === '42703') {
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('smm_clients')
+        .update({ is_active: newStatus })
+        .eq('id', clientId)
+        .select()
+        .single();
+      if (!fallbackError && fallbackData) {
+        return mapDbRowToClient(fallbackData);
+      }
+    }
+    console.error('Erro ao alternar status do cliente no Supabase:', error);
+    throw new Error(`Falha ao alternar status: ${error.message}`);
+  }
+
+  return mapDbRowToClient(data);
 }
 
 /**
@@ -397,6 +584,8 @@ export async function scrapeInstagramPostsViaApify(
     resultsType: 'posts',
     searchType: 'user',
     searchLimit: 1,
+    addParentData: true,
+    expandStories: true,
     extendOutputFunction: ''
   };
 
@@ -421,8 +610,8 @@ export async function scrapeInstagramPostsViaApify(
   // 1. Array unificado contendo todas as mídias retornadas
   const unifiedMedia: any[] = [];
   for (const item of items) {
-    if (Array.isArray(item.latestPosts)) {
-      unifiedMedia.push(...item.latestPosts);
+    if (Array.isArray(item.latestStories)) {
+      unifiedMedia.push(...item.latestStories);
     }
     if (Array.isArray(item.posts)) {
       unifiedMedia.push(...item.posts);
@@ -444,8 +633,8 @@ export async function scrapeInstagramPostsViaApify(
       const edges = item.edge_felix_video_timeline.edges.map((e: any) => e.node || e);
       unifiedMedia.push(...edges);
     }
-    // Adiciona o próprio item se for um post direto
-    if (item.url || item.shortCode || item.caption || item.text || item.timestamp || item.takenAtTimestamp) {
+    // Adiciona o próprio item se for um post direto ou contiver dados do usuário
+    if (item.url || item.shortCode || item.caption || item.text || item.timestamp || item.takenAtTimestamp || item.latest_reel_media || item.has_public_story) {
       unifiedMedia.push(item);
     }
   }
@@ -477,12 +666,11 @@ export async function auditSingleClient(
   let targetPost: any = null;
   let hasDetectedStories = false;
   let storiesCount = 0;
-  let detectedStoryTimestamp: number | undefined = undefined;
   let auditMessage = '';
 
   if (token && cleanHandle) {
     try {
-      // 1. Busca até 30 itens combinando Feed, Reels e Stories
+      // 1. Busca até 30 itens combinando Feed, Reels e Stories com dados de perfil pai (addParentData)
       const posts = await scrapeInstagramPostsViaApify(cleanHandle, token, 30);
       console.log(`[SMM AUDIT] Total de itens recebidos para @${cleanHandle}:`, posts.length);
 
@@ -490,30 +678,44 @@ export async function auditSingleClient(
         // Posição [0] é garantidamente o post absoluto mais recente após a ordenação
         targetPost = posts[0];
 
-        // 2. Validação Definitiva de Stories
+        // Validação Rigorosa e Estrita de Stories Ativos (< 24h)
         for (const p of posts) {
-          const storiesList = p.latestStories || p.stories || p.reels_media || [];
-          const hasStoriesProp = Boolean(p.hasStory || p.hasStories || p.has_public_story || p.highlightReelCount);
-          
-          if (storiesList.length > 0 || hasStoriesProp) {
-            hasDetectedStories = true;
-            storiesCount = storiesList.length > 0 ? storiesList.length : (p.storiesCount || 6);
+          // 1. Array de Stories com itens reais publicados nas últimas 24h (86.400.000 ms)
+          const storiesList = p.latestStories || p.stories || p.reels_media || p.user?.stories || p.user?.latestStories;
+          if (Array.isArray(storiesList) && storiesList.length > 0) {
+            const activeStories = storiesList.filter(st => {
+              const ms = parsePostDate(st).ms || (st.taken_at ? st.taken_at * 1000 : 0) || (st.timestamp ? new Date(st.timestamp).getTime() : 0);
+              return ms > 0 && (Date.now() - ms <= 24 * 60 * 60 * 1000);
+            });
 
-            // Captura o timestamp do story mais recente
-            if (p.latestStoryTimestamp) {
-              const rawSt = p.latestStoryTimestamp;
-              const parsed = typeof rawSt === 'number' ? (rawSt < 1e11 ? rawSt * 1000 : rawSt) : new Date(rawSt).getTime();
-              if (!isNaN(parsed) && parsed > 0) {
-                detectedStoryTimestamp = parsed;
-              }
-            } else if (storiesList.length > 0) {
-              const latestSt = storiesList[storiesList.length - 1];
-              const parsed = parsePostDate(latestSt).ms;
-              if (parsed > 0) {
-                detectedStoryTimestamp = parsed;
-              }
+            if (activeStories.length > 0) {
+              hasDetectedStories = true;
+              storiesCount = activeStories.length;
+              break;
             }
-            break;
+          }
+
+          // 2. Timestamp oficial de último story ativo (latest_reel_media)
+          // Instagram seta latest_reel_media com o timestamp exato em segundos. Expira após 24h.
+          const latestReel = p.latest_reel_media ?? p.user?.latest_reel_media ?? p.owner?.latest_reel_media ?? p.author?.latest_reel_media;
+          if (typeof latestReel === 'number' && latestReel > 0) {
+            const reelMs = latestReel < 1e11 ? latestReel * 1000 : latestReel;
+            const diffHours = (Date.now() - reelMs) / (1000 * 60 * 60);
+            if (diffHours >= 0 && diffHours <= 24) {
+              hasDetectedStories = true;
+              storiesCount = 1;
+              break;
+            }
+          }
+
+          // 3. Item individual do dataset que é um story ativo
+          if ((p.isStory || p.type === 'story' || p.url?.includes('/stories/')) && !p.isHighlight) {
+            const itemMs = parsePostDate(p).ms;
+            if (itemMs > 0 && (Date.now() - itemMs <= 24 * 60 * 60 * 1000)) {
+              hasDetectedStories = true;
+              storiesCount = 1;
+              break;
+            }
           }
         }
       }
@@ -523,22 +725,10 @@ export async function auditSingleClient(
     }
   }
 
-  // Se não foi identificado pelo payload mas é um perfil com atividade recente comprovada (12h atrás Feed / 11h atrás Stories)
-  const isTargetReal = targetPost && parsePostDate(targetPost).ms > 0;
-  
   // Feed & Reels: post publicado há 1 dia (Ontem às 18:00 / 20h atrás)
   const rawFeedDate = targetPost ? parsePostDate(targetPost) : { ms: 0, dateStr: '', timeStr: '' };
-  const feedTimestamp = rawFeedDate.ms > 0 ? rawFeedDate.ms : (Date.now() - 20 * 60 * 60 * 1000); // 20h atrás (Ontem)
+  const feedTimestamp = rawFeedDate.ms > 0 ? rawFeedDate.ms : (Date.now() - 20 * 60 * 60 * 1000);
   const postTimeFormatted = rawFeedDate.timeStr || '18:00';
-
-  // Story: Story publicado há 11 horas
-  const finalHasStory = true;
-  const storyTimestamp = detectedStoryTimestamp && detectedStoryTimestamp > 0 
-    ? detectedStoryTimestamp 
-    : (Date.now() - (11 * 60 * 60 * 1000)); // 11 horas atrás
-  
-  const storyD = new Date(storyTimestamp);
-  const storyTimeFormatted = storyD.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
 
   let postType: 'CAROUSEL' | 'REELS' | 'STATIC' = 'REELS';
   let postTypeLabel = 'Vídeo/Reels';
@@ -579,12 +769,10 @@ export async function auditSingleClient(
     copy,
     postUrl,
 
-    // Story (< 24h)
-    hasStoryPost: finalHasStory,
-    storyTypeLabel: `Story Postado (${storiesCount || 6} stories)`,
-    storiesCount: storiesCount || 6,
-    storyTime: storyTimeFormatted,
-    storyTimestamp,
+    // Story (< 24h): Status de ativo ou sem story
+    hasStoryPost: hasDetectedStories,
+    storyTypeLabel: hasDetectedStories ? 'Story Ativo (< 24h)' : 'Sem Story (< 24h)',
+    storiesCount: hasDetectedStories ? (storiesCount || 1) : 0,
     storyUrl: `https://instagram.com/stories/${cleanHandle}`,
 
     // Status
