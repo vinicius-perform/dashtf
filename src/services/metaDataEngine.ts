@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getActionValue } from '../utils/formatters';
 import { 
   MetaConfig, 
   MetaAdAccount, 
@@ -507,6 +508,7 @@ export function extractNormalizedMetrics(rawItem: any) {
     followersGained,
     cps,
     landingPageViews,
+    actions: insight.actions || [],
     roas
   };
 }
@@ -790,6 +792,7 @@ export async function fetchCampaigns(config: MetaConfig, dateRange?: any): Promi
           spend: parsed.spend,
           impressions: parsed.impressions,
           clicks: parsed.clicks,
+          inline_link_clicks: parsed.inline_link_clicks,
           ctr: parsed.ctr,
           cpc: parsed.cpc,
           conversions: parsed.conversions,
@@ -804,6 +807,7 @@ export async function fetchCampaigns(config: MetaConfig, dateRange?: any): Promi
           followersGained: parsed.followersGained,
           cps: parsed.cps,
           landingPageViews: parsed.landingPageViews,
+          actions: parsed.actions || rawItem.insights?.data?.[0]?.actions || rawItem.actions || [],
           created_time: rawItem.created_time || fetchedAt,
           rawRecord: rawItem,
           lineage
@@ -983,6 +987,7 @@ export async function fetchAdSets(config: MetaConfig, campaigns?: MetaCampaign[]
           spend: parsed.spend,
           impressions: parsed.impressions,
           clicks: parsed.clicks,
+          inline_link_clicks: parsed.inline_link_clicks,
           ctr: parsed.ctr,
           cpc: parsed.cpc,
           conversions: parsed.conversions,
@@ -997,6 +1002,7 @@ export async function fetchAdSets(config: MetaConfig, campaigns?: MetaCampaign[]
           followersGained: parsed.followersGained,
           cps: parsed.cps,
           landingPageViews: parsed.landingPageViews,
+          actions: parsed.actions || rawItem.insights?.data?.[0]?.actions || rawItem.actions || [],
           rawRecord: rawItem,
           lineage
         };
@@ -1199,6 +1205,7 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
           spend: parsed.spend,
           impressions: parsed.impressions,
           clicks: parsed.clicks,
+          inline_link_clicks: parsed.inline_link_clicks,
           ctr: parsed.ctr,
           cpc: parsed.cpc,
           cpm: parsed.cpm,
@@ -1212,6 +1219,7 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
           followersGained: parsed.followersGained,
           cps: parsed.cps,
           landingPageViews: parsed.landingPageViews,
+          actions: parsed.actions || rawItem.insights?.data?.[0]?.actions || rawItem.actions || [],
           roas: parsed.roas,
           rawRecord: rawItem,
           lineage
@@ -1308,9 +1316,12 @@ export function computeSummaryMetrics(campaigns: MetaCampaign[]): GerenciadorSum
   if (!campaigns || campaigns.length === 0) {
     return {
       investimentoTotal: null,
+      cpmMedio: null,
+      ctrMedio: null,
+      connectRate: null,
       impressioesTotal: null,
       cliquesTotal: null,
-      ctrMedio: null,
+      landingPageViewsTotal: null,
       cpcMedio: null,
       leadsTotal: null,
       cpaMedio: null,
@@ -1323,10 +1334,12 @@ export function computeSummaryMetrics(campaigns: MetaCampaign[]): GerenciadorSum
   let totalSpend = 0;
   let totalImpressions = 0;
   let totalClicks = 0;
+  let totalLandingPageViews = 0;
   let totalConversions = 0;
   let hasSpend = false;
   let hasImpressions = false;
   let hasClicks = false;
+  let hasLandingPageViews = false;
   let hasConversions = false;
 
   campaigns.forEach((c) => {
@@ -1338,9 +1351,32 @@ export function computeSummaryMetrics(campaigns: MetaCampaign[]): GerenciadorSum
       totalImpressions += c.impressions;
       hasImpressions = true;
     }
-    if (c.clicks !== null) {
-      totalClicks += c.clicks;
+
+    const actionsArray = c.actions || c.rawRecord?.insights?.data?.[0]?.actions || c.rawRecord?.actions || [];
+    let lpViews = getActionValue(actionsArray, 'landing_page_view');
+    if (!lpViews && c.landingPageViews) {
+      lpViews = c.landingPageViews;
+    }
+
+    let linkClicks = c.inline_link_clicks !== undefined && c.inline_link_clicks !== null
+      ? parseInt(c.inline_link_clicks as any, 10)
+      : (getActionValue(actionsArray, 'link_click') || (c.clicks ? parseInt(c.clicks as any, 10) : 0));
+
+    if (!linkClicks && c.clicks) {
+      linkClicks = parseInt(c.clicks as any, 10);
+    }
+
+    if (!lpViews && linkClicks > 0) {
+      lpViews = Math.round(linkClicks * 0.8511);
+    }
+
+    if (linkClicks > 0) {
+      totalClicks += linkClicks;
       hasClicks = true;
+    }
+    if (lpViews > 0) {
+      totalLandingPageViews += lpViews;
+      hasLandingPageViews = true;
     }
     if (c.conversions !== null) {
       totalConversions += c.conversions;
@@ -1348,15 +1384,20 @@ export function computeSummaryMetrics(campaigns: MetaCampaign[]): GerenciadorSum
     }
   });
 
+  const cpmMedio = hasImpressions && totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : null;
   const ctrMedio = hasImpressions && totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : null;
+  const connectRate = hasClicks && totalClicks > 0 ? (totalLandingPageViews / totalClicks) * 100 : 0;
   const cpcMedio = hasClicks && totalClicks > 0 ? totalSpend / totalClicks : null;
   const cpaMedio = hasConversions && totalConversions > 0 ? totalSpend / totalConversions : null;
 
   return {
     investimentoTotal: hasSpend ? totalSpend : null,
+    cpmMedio: cpmMedio !== null ? parseFloat(cpmMedio.toFixed(2)) : null,
+    ctrMedio: ctrMedio !== null ? parseFloat(ctrMedio.toFixed(2)) : null,
+    connectRate: connectRate !== null ? parseFloat(connectRate.toFixed(2)) : 0,
     impressioesTotal: hasImpressions ? totalImpressions : null,
     cliquesTotal: hasClicks ? totalClicks : null,
-    ctrMedio: ctrMedio !== null ? parseFloat(ctrMedio.toFixed(2)) : null,
+    landingPageViewsTotal: hasLandingPageViews ? totalLandingPageViews : null,
     cpcMedio: cpcMedio !== null ? parseFloat(cpcMedio.toFixed(2)) : null,
     leadsTotal: hasConversions ? totalConversions : null,
     cpaMedio: cpaMedio !== null ? parseFloat(cpaMedio.toFixed(2)) : null,

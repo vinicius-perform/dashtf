@@ -262,7 +262,7 @@ export async function fetchCrmLeads(): Promise<CrmLead[]> {
       return MOCK_CRM_LEADS;
     }
 
-    if (data && data.length > 0) {
+    if (Array.isArray(data)) {
       return data as CrmLead[];
     }
   } catch (err: any) {

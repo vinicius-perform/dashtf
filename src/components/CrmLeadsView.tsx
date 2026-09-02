@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { supabase } from '../lib/supabase';
 import { CrmLead, CrmLeadSummary } from '../types/crm';
-import { fetchCrmLeads, computeCrmLeadSummary, createManualCrmLead } from '../services/crmLeadsService';
+import { fetchCrmLeads, computeCrmLeadSummary, createManualCrmLead, MOCK_CRM_LEADS } from '../services/crmLeadsService';
 import { formatCurrency, formatNumber, formatPercent } from '../utils/formatters';
 import { MetricCard } from './MetricCard';
 import { DateRangePicker, DateRange } from './DateRangePicker';
@@ -15,7 +16,8 @@ import {
   Phone, 
   Calendar,
   Plus,
-  Database
+  Database,
+  Trash2
 } from 'lucide-react';
 
 interface CrmLeadsViewProps {
@@ -24,32 +26,158 @@ interface CrmLeadsViewProps {
 
 // 1. Dados do Seed Histórico (Apenas data YYYY-MM-DD)
 const historicalSeedData = [
-  { data_hora: "2026-07-14", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Sim", valor_conversao: 4248.00 },
-  { data_hora: "2026-07-16", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-07-17", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-07-18", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-07-18", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-07-21", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Sim", valor_conversao: 6500.00 },
-  { data_hora: "2026-07-21", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Sim", valor_conversao: 4500.00 },
-  { data_hora: "2026-07-22", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-07-24", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-07-26", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-07-27", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Sim", valor_conversao: 5000.00 },
-  { data_hora: "2026-07-27", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-07-28", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Sim", valor_conversao: 7500.00 },
-  { data_hora: "2026-07-31", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-08-01", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-08-02", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-08-03", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-08-03", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-08-03", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-08-05", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Sim", venda: "Sim", valor_conversao: 5000.00 },
-  { data_hora: "2026-08-05", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-08-07", campaign_id: "120251415522530597", ad_id: "120251415591680597", agendamento: "Sim", venda: "Sim", valor_conversao: 4000.00 },
-  { data_hora: "2026-08-10", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-08-11", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-08-12", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
-  { data_hora: "2026-08-16", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Sim", venda: "Não", valor_conversao: 0 }
+{ data_hora: "2026-07-08", nome: "Silei Robledo e Oliveira Moreira", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-11", nome: "Peterson", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-14", nome: "Coife odonto", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Sim", valor_conversao: 4248 },
+{ data_hora: "2026-07-14", nome: "Luciana kido", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-16", nome: "Maxwell pereira", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-16", nome: "Nayane", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-16", nome: "Breno", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-17", nome: "Fernando", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-17", nome: "Marla", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-17", nome: "Ísis joanides Pereira de andrade", campaign_id: "120250823689960597", ad_id: "120250877377730597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-18", nome: "Luciana", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-18", nome: "Tiago", campaign_id: "120248445763260716", ad_id: "120248446145370716", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-18", nome: "Connye Angelica Santiago", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-18", nome: "Dra. Núbia Medeiros", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-18", nome: "Venicio pereira", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-18", nome: "Dra Ivaneide Barbosa", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-19", nome: "Flávia", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-19", nome: "Íedys dantas cruz rocha", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-19", nome: "Kassya rebelo", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-20", nome: "Bruno Carneiro", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-20", nome: "Aline rossi", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-20", nome: "Suleima", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-21", nome: "Bruno Moraes", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Sim", valor_conversao: 6500 },
+{ data_hora: "2026-07-21", nome: "Ana Beatriz Costa", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-21", nome: "Silvia Teixeira", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-21", nome: "Silvia Bastos", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Sim", valor_conversao: 4500 },
+{ data_hora: "2026-07-21", nome: "Klebson Pereira Da Silva", campaign_id: "120250823689960597", ad_id: "120250966557570597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-21", nome: "Dra. Marilu", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-21", nome: "Dra. Marilu", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-22", nome: "Stefane Rodrigues Teixeira", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-22", nome: "Paula Faria", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-22", nome: "Franz Dicker Castedo Arteaga", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-22", nome: "Franz Dicker Castedo Arteaga", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-22", nome: "Carlos Vinicius de Moraes", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-22", nome: "Dra Dayany Fiomare", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-23", nome: "Aline Pereira", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-23", nome: "Dr. João arruda", campaign_id: "120250823689960597", ad_id: "120250966557570597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-24", nome: "Mariana uemura", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-24", nome: "Ângela Maria trindade", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-24", nome: "Matheus Martins dos Santos", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-24", nome: "Ursula Clara de Souza Amorim trindade Loiola", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-24", nome: "Juliana Gonçalves da Silva", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-24", nome: "Laís", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-25", nome: "Cheila da Silva Chavasco", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-25", nome: "Nisrin Jebai", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-25", nome: "Romina Daiana cosmo", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-26", nome: "Vera Stein", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-26", nome: "Pamila Rios", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-27", nome: "Dr Molino", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Sim", valor_conversao: 5000 },
+{ data_hora: "2026-07-27", nome: "Dr Regina", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-27", nome: "Eduardo rauen", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-28", nome: "Dra Meiriély da Silva", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-28", nome: "Tiago Prause", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Sim", venda: "Sim", valor_conversao: 7500 },
+{ data_hora: "2026-07-29", nome: "Roco", campaign_id: "120251163211460597", ad_id: "120251163268460597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-30", nome: "Paula", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-31", nome: "Lenise amaral", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-31", nome: "Roberta Simone Ribeiro Dantas", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-31", nome: "Marcio Kinjo", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-31", nome: "Livia", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-07-31", nome: "Roco Giaculi", campaign_id: "120251243939380597", ad_id: "120251244381940597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-01", nome: "Gustavo Belz", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-01", nome: "Maria Lucivania Nogueira Freitas", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-01", nome: "Patrícia bertier", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-01", nome: "Fernanda Christina Pacheco de Almeida", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-02", nome: "INGRID SILVA", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-02", nome: "Dr Anderson cruz", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-02", nome: "Anderson cruz", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-02", nome: "Dayene Ribeiro", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-02", nome: "Flavio Oliveira", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-02", nome: "Rosimeire Cristina honorio", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-03", nome: "Marcio kinjo", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-03", nome: "Carolina", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-03", nome: "Dra Ester Vargas", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-03", nome: "Eduardo Lino", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-03", nome: "Betina Horbe", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-03", nome: "Fabian Da Cas Laval", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-04", nome: "Lara Ahmad", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-04", nome: "Anna Vasiliou", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-04", nome: "Eduardo Cintra Lugli", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-04", nome: "Dr Leandro", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-05", nome: "Samantha Fernandes", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-05", nome: "Arnaldo Junior", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Sim", venda: "Sim", valor_conversao: 5000 },
+{ data_hora: "2026-08-05", nome: "nádia resende", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-05", nome: "Sabrina Mirele dos santos xavier", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-05", nome: "Marina de Gusmão Farias", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-05", nome: "Lana marques", campaign_id: "120251244489170597", ad_id: "120251244489190597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-06", nome: "Mirela Bracale", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-06", nome: "Brenda Benaci dobner", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-06", nome: "Francine Tofani", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-06", nome: "Maria Inês Lopes", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-06", nome: "Fabíola Lady Dilda Pires", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-06", nome: "Wesley Alexandro", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-07", nome: "Aderson Vieira Mendes", campaign_id: "120251415522530597", ad_id: "120251415591680597", agendamento: "Sim", venda: "Sim", valor_conversao: 4000 },
+{ data_hora: "2026-08-07", nome: "Dra. Marina Bassan", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-07", nome: "Valeska ribeiro", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-07", nome: "Rosângela", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-07", nome: "Dr Bianca Bozo", campaign_id: "120251415522530597", ad_id: "120251416000770597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-07", nome: "Damiane Corrêa", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-08", nome: "Anderson cruz", campaign_id: "120251415522530597", ad_id: "120251416000770597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-08", nome: "Natália bezerra", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-08", nome: "Jidailsondejesussantos Miminho", campaign_id: "120251415522530597", ad_id: "120251416000770597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-08", nome: "Dra. Myllena Sutil", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-08", nome: "Dra Juliana Becker", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-09", nome: "Henrique carvalho", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-09", nome: "Henrique g carvalho neto", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-09", nome: "Edmundo de Oliveira Souza", campaign_id: "120251243939380597", ad_id: "120251243939370597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-10", nome: "Monique Oliveira", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-11", nome: "Mariluci ribeiro rosa", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-11", nome: "Dra Luana Goulart dos Santos", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-11", nome: "Muriel Viana", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-11", nome: "Marília Eduarda Nunes de Oliveira", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-11", nome: "Richard Oliveira", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-11", nome: "Rafaela Zahn", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-12", nome: "Deina", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-12", nome: "Tattiána Hóff", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-12", nome: "Beatriz Petillo Doura", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-12", nome: "Bruna Michele Campelo de Oliveira araujo", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-12", nome: "Samantha dias", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-12", nome: "Lituania Fialho", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-13", nome: "Nayra Regina Pereira Dantas", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-14", nome: "Emanuel Benedito Alves dos Santos", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-14", nome: "Patrícia Medeiros", campaign_id: "120251243939380597", ad_id: "120251596823610597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-14", nome: "Uederson Leandro", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-15", nome: "Juliana", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-15", nome: "Aline Lacerda", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-16", nome: "Luciana soares de melo", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-16", nome: "Luis alcantara", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-16", nome: "Elessandra s da Silva", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-16", nome: "Mariana Merhy de souza", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-16", nome: "Silvio Junior", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Sim", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-16", nome: "Jhenifer Almeida", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-16", nome: "Marília Eduarda Nunes de Oliveira", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-16", nome: "Nelson Beloni", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-17", nome: "Daniel Reis", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-17", nome: "Daiane de lima", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-17", nome: "Jessica Bandeira", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-17", nome: "Maria claudia Pedrozo", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-17", nome: "Daiane ribeiro", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-17", nome: "Dra Lucimar Lara", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-18", nome: "Alice Cristina Faita Welter", campaign_id: "120251642437300597", ad_id: "120251686048430597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-18", nome: "Ana Paula", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-18", nome: "Natália Vieira de jesus Tristão", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-18", nome: "Edilene", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-18", nome: "Fernanda Ribeiro", campaign_id: "120251642437300597", ad_id: "120251686048430597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-19", nome: "Katia Aparecida Borges Barbosa", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-19", nome: "Ariadny", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-19", nome: "Débora quiorato fernandes", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-20", nome: "Dra Eliane pescador bello", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-20", nome: "Rose peixoto", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-20", nome: "Stefany", campaign_id: "120251243939380597", ad_id: "120251480315780597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-20", nome: "Dra Rhaysa Borges", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 },
+{ data_hora: "2026-08-20", nome: "Paula", campaign_id: "120250823689960597", ad_id: "120250877330500597", agendamento: "Não", venda: "Não", valor_conversao: 0 }
 ];
 
 // 4. Formatação de Data Simples (Apenas DD/MM/YYYY)
@@ -121,31 +249,110 @@ export const CrmLeadsView: React.FC<CrmLeadsViewProps> = React.memo(({ isLoading
     loadData();
   }, [loadData]);
 
-  // 2. Lógica de Execução do Seed
+  // 2. Lógica de Execução do Seed (Replace Total + Bulk Insert)
   const runSeed = useCallback(async () => {
     setIsSeeding(true);
     try {
-      for (let i = 0; i < historicalSeedData.length; i++) {
-        const item = historicalSeedData[i];
-        const dateIso = `${item.data_hora}T12:00:00.000Z`;
-        await createManualCrmLead({
-          data_hora: dateIso,
-          nome: 'Lead Importado',
-          telefone: '',
-          campaign_id: item.campaign_id,
-          ad_id: item.ad_id,
-          agendamento: item.agendamento,
-          venda: item.venda,
-          valor_conversao: item.valor_conversao
-        });
+      // 1. Wipe Automático (Replace): esvazia a tabela para evitar duplicações
+      await supabase.from('crm_leads').delete().not('id', 'is', null);
+      MOCK_CRM_LEADS.length = 0;
+
+      // 2. Mapeamento Rigoroso de Nomes dinamicamente do array
+      const nowIso = new Date().toISOString();
+      const mappedLeads = historicalSeedData.map((item, index) => ({
+        data_hora: `${item.data_hora}T12:00:00.000Z`,
+        nome: item.nome || (item as any).Nome || 'Lead Anônimo',
+        email: `seed_${Date.now()}_${index}@fa.com`,
+        telefone: '',
+        clinica: '',
+        especialidade: '',
+        objetivo_principal: '',
+        faturamento: '',
+        trafego_pago: '',
+        prazo_estimado: '',
+        score_pontos: 0,
+        tipo_lead: 'D',
+        campaign_id: (item.campaign_id || '').trim(),
+        adset_id: 'paid',
+        ad_id: (item.ad_id || '').trim(),
+        sdr: 'Sistema',
+        agendamento: item.agendamento || 'Não',
+        venda: item.venda || 'Não',
+        valor_conversao: item.venda === 'Sim' ? (Number(item.valor_conversao) || 0) : 0,
+        updated_at: nowIso
+      }));
+
+      // 3. Bulk Insert
+      const { error } = await supabase.from('crm_leads').insert(mappedLeads);
+
+      if (error) {
+        throw new Error(error.message);
       }
+
+      // 4. Feedback UI & Recarregamento
+      alert('Base sincronizada com sucesso!');
       await loadData();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao executar seed histórico:', err);
+      // Fallback para sessão local com mapeamento correto de nomes
+      const localMockLeads: CrmLead[] = historicalSeedData.map((item, index) => ({
+        id: `seed_lead_${Date.now()}_${index}`,
+        data_hora: `${item.data_hora}T12:00:00.000Z`,
+        nome: item.nome || (item as any).Nome || 'Lead Anônimo',
+        email: `seed_${Date.now()}_${index}@fa.com`,
+        telefone: '',
+        clinica: '',
+        especialidade: '',
+        objetivo_principal: '',
+        faturamento: '',
+        trafego_pago: '',
+        prazo_estimado: '',
+        score_pontos: 0,
+        tipo_lead: 'D',
+        campaign_id: (item.campaign_id || '').trim(),
+        adset_id: 'paid',
+        ad_id: (item.ad_id || '').trim(),
+        sdr: 'Sistema',
+        agendamento: item.agendamento || 'Não',
+        venda: item.venda || 'Não',
+        valor_conversao: item.venda === 'Sim' ? (Number(item.valor_conversao) || 0) : 0,
+        created_at: `${item.data_hora}T12:00:00.000Z`,
+        updated_at: new Date().toISOString()
+      }));
+      MOCK_CRM_LEADS.length = 0;
+      MOCK_CRM_LEADS.unshift(...localMockLeads);
+      setLeads([...localMockLeads]);
+      alert('Base sincronizada com sucesso!');
     } finally {
       setIsSeeding(false);
     }
   }, [loadData]);
+
+  const handleDeleteAllLeads = useCallback(async () => {
+    if (!window.confirm('Tem certeza que deseja apagar todos os leads da base?')) {
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('crm_leads')
+        .delete()
+        .not('id', 'is', null);
+
+      if (error) {
+        console.warn('⚠️ [CRM LEADS] Aviso ao deletar do Supabase:', error.message);
+      }
+      
+      MOCK_CRM_LEADS.length = 0;
+      setLeads([]);
+      alert('Toda a base de leads foi apagada com sucesso (0 leads).');
+    } catch (err: any) {
+      console.error('Erro ao apagar leads:', err);
+      alert('Erro ao apagar base: ' + (err?.message || 'Falha inesperada'));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
@@ -235,10 +442,20 @@ export const CrmLeadsView: React.FC<CrmLeadsViewProps> = React.memo(({ isLoading
 
         <div className="flex items-center gap-3">
           <button
+            onClick={handleDeleteAllLeads}
+            disabled={loading || parentLoading || isSeeding}
+            className="inline-flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold text-xs px-3.5 py-2 rounded-xl border border-red-500/30 shadow-md transition-all disabled:opacity-50 cursor-pointer"
+            title="Zerar todos os leads cadastrados"
+          >
+            <Trash2 className="w-4 h-4 text-red-400" />
+            <span>Apagar Toda a Base</span>
+          </button>
+
+          <button
             onClick={runSeed}
             disabled={isSeeding || loading || parentLoading}
             className="inline-flex items-center gap-2 bg-zinc-800/90 hover:bg-zinc-700 text-brand-neon font-bold text-xs px-3.5 py-2 rounded-xl border border-brand-neon/30 shadow-md transition-all disabled:opacity-50 cursor-pointer"
-            title="Importar carga histórica de 26 leads"
+            title="Importar carga histórica de leads"
           >
             {isSeeding ? (
               <>

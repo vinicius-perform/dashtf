@@ -8,6 +8,7 @@ interface MetricCardProps {
   extraInfoValue?: string;
   showDollarIcon?: boolean;
   isLoading?: boolean;
+  valueClassName?: string;
 }
 
 export const MetricCard: React.FC<MetricCardProps> = React.memo(({
@@ -17,6 +18,7 @@ export const MetricCard: React.FC<MetricCardProps> = React.memo(({
   extraInfoValue,
   showDollarIcon = true,
   isLoading = false,
+  valueClassName,
 }) => {
   return (
     <div className="bg-brand-card border border-brand-border rounded-xl p-4 flex flex-col justify-between hover:border-brand-neon/40 transition-all shadow-sm group sharp-card">
@@ -36,7 +38,7 @@ export const MetricCard: React.FC<MetricCardProps> = React.memo(({
       {isLoading ? (
         <div className="h-8 w-28 rounded skeleton-shimmer my-1" />
       ) : (
-        <div className="text-2xl font-black text-white tracking-tight my-1">
+        <div className={`text-2xl font-black tracking-tight my-1 ${valueClassName || 'text-white'}`}>
           {mainValue}
         </div>
       )}

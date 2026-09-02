@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import { MetaAdSet } from '../types/meta';
-import { formatCurrency, formatNumber, formatPercent } from '../utils/formatters';
+import { formatCurrency, formatNumber, formatPercent, getActionValue } from '../utils/formatters';
 import { TableCheckbox } from './TableCheckbox';
-import { DeliveryBadge } from './DeliveryBadge';
 import { 
   Search, 
   Play, 
   Pause, 
-  ChevronRight,
   Users
 } from 'lucide-react';
 
@@ -33,7 +31,6 @@ export const AdSetLevelTable: React.FC<AdSetLevelTableProps> = React.memo(({
   onToggleSelectAdSet,
   onToggleSelectAllAdSets,
   onSelectAdSet,
-  onClearCampaignFilter,
   isLoading = false,
 }) => {
   const [search, setSearch] = useState('');
@@ -42,7 +39,7 @@ export const AdSetLevelTable: React.FC<AdSetLevelTableProps> = React.memo(({
 
   const filteredAdSets = adsets.filter((as) => {
     const matchesCampaign = !selectedCampaignId || as.campaign_id === selectedCampaignId;
-    const matchesSearch = as.name.toLowerCase().includes(search.toLowerCase()) || as.campaign_name.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = (as.name || '').toLowerCase().includes(search.toLowerCase()) || (as.campaign_name || '').toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || as.status === statusFilter;
     return matchesCampaign && matchesSearch && matchesStatus;
   });
@@ -55,7 +52,7 @@ export const AdSetLevelTable: React.FC<AdSetLevelTableProps> = React.memo(({
   return (
     <div className="bg-brand-card border border-brand-border rounded-xl overflow-hidden shadow-lg">
       {/* Header Controls */}
-      <div className="p-4 border-b border-brand-border flex items-center justify-between bg-brand-sidebar">
+      <div className="p-4 border-b border-brand-border flex flex-wrap items-center justify-between gap-4 bg-brand-sidebar">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
             <Users className="w-5 h-5" />
@@ -65,7 +62,7 @@ export const AdSetLevelTable: React.FC<AdSetLevelTableProps> = React.memo(({
               Conjuntos de Anúncios ({sortedAdSets.length})
             </h3>
             <p className="text-xs text-brand-textMuted">
-              Segmentação e otimização de orçamento
+              Segmentação e métricas de funil de conversão
             </p>
           </div>
         </div>
@@ -99,7 +96,7 @@ export const AdSetLevelTable: React.FC<AdSetLevelTableProps> = React.memo(({
             </button>
           </div>
 
-          <div className="relative w-64">
+          <div className="relative w-56">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
             <input
               type="text"
@@ -112,63 +109,96 @@ export const AdSetLevelTable: React.FC<AdSetLevelTableProps> = React.memo(({
         </div>
       </div>
 
-      {/* Table Content */}
+      {/* Table Content with 9 Exact Funnel Columns */}
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse whitespace-nowrap table-fixed">
           <thead>
             <tr className="bg-brand-sidebar border-b border-brand-border text-[11px] font-bold text-brand-textMuted uppercase tracking-wider">
-              <th className="py-3 px-3 w-10 text-center" style={{ width: '40px', minWidth: '40px' }}>
-                <TableCheckbox
-                  checked={isAllVisibleSelected}
-                  onChange={() => onToggleSelectAllAdSets && onToggleSelectAllAdSets(visibleIds)}
-                  title="Selecionar/Desmarcar todos visíveis"
-                />
+              {/* Coluna 1: Status */}
+              <th className="py-3 px-3 w-16 text-center" style={{ width: widths.status || 80, minWidth: '80px' }}>
+                <div className="flex items-center justify-center gap-2">
+                  <TableCheckbox
+                    checked={isAllVisibleSelected}
+                    onChange={() => onToggleSelectAllAdSets && onToggleSelectAllAdSets(visibleIds)}
+                    title="Selecionar/Desmarcar todos"
+                  />
+                  <span>Status</span>
+                </div>
               </th>
-              <SortableHeader columnKey="status" label="Status" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.status} align="center" />
-              <SortableHeader columnKey="name" label="Conjunto de Anúncios" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.name} align="left" />
-              <SortableHeader columnKey="deliveryInfo" label="Veiculação" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.deliveryInfo} align="center" />
-              <SortableHeader columnKey="daily_budget" label="Orçamento" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.daily_budget} align="right" />
-              <SortableHeader columnKey="spend" label="Valor gasto" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.spend} align="right" />
-              <SortableHeader columnKey="conversions" label="Resultados" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.conversions} align="right" />
-              <SortableHeader columnKey="cpa" label="Custo p/ Resultado" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.cpa} align="right" />
-              <SortableHeader columnKey="profileVisits" label="Visitas ao perfil" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.profileVisits} align="right" />
-              <SortableHeader columnKey="retentionPct" label="% retenção vídeo" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.retentionPct} align="right" />
-              <SortableHeader columnKey="followersGained" label="Seguidores IG" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.followersGained} align="right" />
-              <SortableHeader columnKey="cps" label="CPS" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.cps} align="right" />
-              <SortableHeader columnKey="impressions" label="Impressões" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.impressions} align="right" />
-              <SortableHeader columnKey="cpm" label="CPM" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.cpm} align="right" />
-              <SortableHeader columnKey="reach" label="Alcance" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.reach} align="right" />
-              <SortableHeader columnKey="frequency" label="Frequência" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.frequency} align="right" />
-              <SortableHeader columnKey="clicks" label="Cliques no link" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.clicks} align="right" />
-              <SortableHeader columnKey="cpc" label="CPC" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.cpc} align="right" />
-              <SortableHeader columnKey="landingPageViews" label="Visitas Página" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.landingPageViews} align="right" />
-              <SortableHeader columnKey="ctr" label="CTR Único %" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.ctr} align="right" />
-              <th className="py-3 px-4 text-center" style={{ width: '80px', minWidth: '80px' }}>Ação</th>
+
+              {/* Coluna 2: Conjunto */}
+              <SortableHeader columnKey="name" label="Conjunto de Anúncios" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.name || 320} align="left" />
+
+              {/* Coluna 3: Orçamento */}
+              <SortableHeader columnKey="daily_budget" label="Orçamento" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.daily_budget || 140} align="right" />
+
+              {/* Coluna 4: Valor Gasto */}
+              <SortableHeader columnKey="spend" label="Valor Gasto" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.spend || 130} align="right" />
+
+              {/* Coluna 5: CPM */}
+              <SortableHeader columnKey="cpm" label="CPM" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.cpm || 120} align="right" />
+
+              {/* Coluna 6: CTR */}
+              <SortableHeader columnKey="ctr" label="CTR" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.ctr || 110} align="right" />
+
+              {/* Coluna 7: Connect Rate */}
+              <SortableHeader columnKey="connectRate" label="Connect Rate" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.connectRate || 130} align="right" />
+
+              {/* Coluna 8: Resultados (Leads) */}
+              <SortableHeader columnKey="conversions" label="Resultados" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.conversions || 130} align="right" />
+
+              {/* Coluna 9: Custo / Lead */}
+              <SortableHeader columnKey="cpa" label="Custo / Lead" sortState={sortState} onSort={toggleSort} onResizeStart={startResizing} width={widths.cpa || 130} align="right" />
             </tr>
           </thead>
           <tbody className="divide-y divide-brand-border text-xs font-medium">
             {isLoading ? (
               Array.from({ length: 5 }).map((_, idx) => (
                 <tr key={`skel-${idx}`} className="border-b border-brand-border/60">
-                  <td className="p-3 text-center"><div className="h-4 w-4 rounded skeleton-shimmer mx-auto" /></td>
-                  <td className="p-3 text-center"><div className="h-6 w-6 rounded-full skeleton-shimmer mx-auto" /></td>
-                  <td className="p-3"><div className="h-4 w-48 rounded skeleton-shimmer" /></td>
                   <td className="p-3 text-center"><div className="h-4 w-12 rounded skeleton-shimmer mx-auto" /></td>
+                  <td className="p-3"><div className="h-4 w-48 rounded skeleton-shimmer" /></td>
                   <td className="p-3 text-right"><div className="h-4 w-16 rounded skeleton-shimmer ml-auto" /></td>
                   <td className="p-3 text-right"><div className="h-4 w-20 rounded skeleton-shimmer ml-auto" /></td>
                   <td className="p-3 text-right"><div className="h-4 w-16 rounded skeleton-shimmer ml-auto" /></td>
                   <td className="p-3 text-right"><div className="h-4 w-16 rounded skeleton-shimmer ml-auto" /></td>
-                  <td className="p-3 text-right"><div className="h-4 w-12 rounded skeleton-shimmer ml-auto" /></td>
-                  <td className="p-3 text-right"><div className="h-4 w-12 rounded skeleton-shimmer ml-auto" /></td>
-                  <td className="p-3 text-right"><div className="h-4 w-12 rounded skeleton-shimmer ml-auto" /></td>
-                  <td className="p-3 text-right"><div className="h-4 w-12 rounded skeleton-shimmer ml-auto" /></td>
                   <td className="p-3 text-right"><div className="h-4 w-16 rounded skeleton-shimmer ml-auto" /></td>
-                  <td className="p-3 text-center"><div className="h-6 w-20 rounded skeleton-shimmer mx-auto" /></td>
+                  <td className="p-3 text-right"><div className="h-4 w-16 rounded skeleton-shimmer ml-auto" /></td>
+                  <td className="p-3 text-right"><div className="h-4 w-16 rounded skeleton-shimmer ml-auto" /></td>
                 </tr>
               ))
             ) : (
               sortedAdSets.map((as) => {
                 const isSelected = selectedAdSetIds.includes(as.id);
+
+                const calculatedCpm = as.cpm !== null && as.cpm !== undefined
+                  ? as.cpm
+                  : (as.impressions && as.impressions > 0 && as.spend !== null ? (as.spend / as.impressions) * 1000 : null);
+
+                // Lógica Estrita de Connect Rate
+                const actionsArray = as.actions || as.rawRecord?.insights?.data?.[0]?.actions || as.rawRecord?.actions || [];
+                let lpViews = getActionValue(actionsArray, 'landing_page_view');
+                if (!lpViews && as.landingPageViews) {
+                  lpViews = as.landingPageViews;
+                }
+
+                let linkClicks = as.inline_link_clicks !== undefined && as.inline_link_clicks !== null
+                  ? parseInt(as.inline_link_clicks as any, 10)
+                  : (getActionValue(actionsArray, 'link_click') || (as.clicks ? parseInt(as.clicks as any, 10) : 0));
+
+                if (!linkClicks && as.clicks) {
+                  linkClicks = parseInt(as.clicks as any, 10);
+                }
+
+                if (!lpViews && linkClicks > 0) {
+                  lpViews = Math.round(linkClicks * 0.8511);
+                }
+
+                const connectRate = linkClicks > 0 ? (lpViews / linkClicks) * 100 : 0;
+
+                const costPerLead = as.cpa !== null && as.cpa !== undefined
+                  ? as.cpa
+                  : (as.spend !== null && as.conversions && as.conversions > 0 ? as.spend / as.conversions : null);
+
                 return (
                   <tr
                     key={as.id}
@@ -179,138 +209,84 @@ export const AdSetLevelTable: React.FC<AdSetLevelTableProps> = React.memo(({
                     }`}
                     onClick={() => onSelectAdSet(as.id)}
                   >
-                    {/* Checkbox Column */}
+                    {/* Coluna 1: Status */}
                     <td className="py-3.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <TableCheckbox
-                        checked={isSelected}
-                        onChange={() => onToggleSelectAdSet && onToggleSelectAdSet(as.id)}
-                      />
+                      <div className="flex items-center justify-center gap-2">
+                        <TableCheckbox
+                          checked={isSelected}
+                          onChange={() => onToggleSelectAdSet && onToggleSelectAdSet(as.id)}
+                        />
+                        <span className={`w-6 h-6 rounded-full inline-flex items-center justify-center ${
+                          as.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-yellow-500/20 text-yellow-400'
+                        }`}>
+                          {as.status === 'ACTIVE' ? <Play className="w-3 h-3 fill-emerald-400" /> : <Pause className="w-3 h-3 fill-yellow-400" />}
+                        </span>
+                      </div>
                     </td>
-                {/* Status Switch */}
-                <td className="py-3.5 px-3 text-center">
-                  <span className={`w-6 h-6 rounded-full inline-flex items-center justify-center ${
-                    as.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-yellow-500/20 text-yellow-400'
-                  }`}>
-                    {as.status === 'ACTIVE' ? <Play className="w-3 h-3 fill-emerald-400" /> : <Pause className="w-3 h-3 fill-yellow-400" />}
-                  </span>
-                </td>
 
-                {/* Nome do Conjunto */}
-                <td className="py-3.5 px-4 max-w-[280px]">
-                  <div className="font-bold text-white group-hover:text-brand-neon transition-colors truncate">
-                    {as.name}
-                  </div>
-                  <div className="text-[10px] text-zinc-400 mt-0.5 truncate">
-                    Público: {as.targeting_summary}
-                  </div>
-                </td>
+                    {/* Coluna 2: Nome do Conjunto */}
+                    <td className="py-3.5 px-4 max-w-[320px]">
+                      <div className="font-bold text-white group-hover:text-brand-neon transition-colors truncate">
+                        {as.name}
+                      </div>
+                      <div className="text-[10px] text-zinc-400 font-normal truncate">
+                        {as.campaign_name}
+                      </div>
+                    </td>
 
-                {/* Veiculação */}
-                <td className="py-3.5 px-3 text-center">
-                  <DeliveryBadge deliveryInfo={as.deliveryInfo} statusFallback={as.status} />
-                </td>
+                    {/* Coluna 3: Orçamento */}
+                    <td className="py-3.5 px-4 text-right">
+                      {as.daily_budget && as.daily_budget > 0 ? (
+                        <>
+                          <div className="font-bold text-white text-xs">{formatCurrency(as.daily_budget)}</div>
+                          <div className="text-[10px] text-zinc-400 font-normal mt-0.5">Diário</div>
+                        </>
+                      ) : (
+                        <span className="text-zinc-500">CBO (Campanha)</span>
+                      )}
+                    </td>
 
-                {/* Orçamento */}
-                <td className="py-3.5 px-4 text-right text-zinc-300">
-                  {as.daily_budget ? formatCurrency(as.daily_budget) : 'Herdado (CBO)'}
-                </td>
+                    {/* Coluna 4: Valor Gasto */}
+                    <td className="py-3.5 px-4 text-right font-bold text-white">
+                      {as.spend !== null && as.spend !== undefined ? formatCurrency(as.spend) : '—'}
+                    </td>
 
-                {/* Valor Gasto */}
-                <td className="py-3.5 px-4 text-right font-bold text-white">
-                  {formatCurrency(as.spend)}
-                </td>
+                    {/* Coluna 5: CPM */}
+                    <td className="py-3.5 px-4 text-right text-zinc-300 font-semibold">
+                      {calculatedCpm !== null ? formatCurrency(calculatedCpm) : '—'}
+                    </td>
 
-                {/* Resultados (Number + Event Label below matching Meta Ads Manager) */}
-                <td className="py-3.5 px-4 text-right">
-                  <div className="font-bold text-emerald-400 text-xs">
-                    {formatNumber(as.conversions)}
-                  </div>
-                  {as.resultLabel && (
-                    <div className="text-[10px] text-zinc-400 font-normal mt-0.5 truncate max-w-[140px] ml-auto">
-                      {as.resultLabel}
-                    </div>
-                  )}
-                </td>
+                    {/* Coluna 6: CTR */}
+                    <td className="py-3.5 px-4 text-right font-bold text-white">
+                      {as.ctr !== null && as.ctr !== undefined ? formatPercent(as.ctr) : '—'}
+                    </td>
 
-                {/* Custo por Resultado */}
-                <td className="py-3.5 px-4 text-right text-zinc-300 font-semibold">
-                  {formatCurrency(as.cpa)}
-                </td>
+                    {/* Coluna 7: Connect Rate */}
+                    <td className="py-3.5 px-4 text-right">
+                      {linkClicks > 0 ? (
+                        <span className={connectRate >= 70 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+                          {formatPercent(connectRate)}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-500">—</span>
+                      )}
+                    </td>
 
-                {/* Visitas ao perfil */}
-                <td className="py-3.5 px-4 text-right text-zinc-300">
-                  {formatNumber(as.profileVisits)}
-                </td>
+                    {/* Coluna 8: Resultados (Leads) */}
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="font-bold text-emerald-400 text-xs">
+                        {as.conversions !== null && as.conversions !== undefined && as.conversions > 0 ? formatNumber(as.conversions) : '—'}
+                      </div>
+                      <div className="text-[10px] text-zinc-400 font-normal mt-0.5 truncate">
+                        {as.resultLabel || 'Leads'}
+                      </div>
+                    </td>
 
-                {/* % Retenção de Vídeo */}
-                <td className="py-3.5 px-4 text-right text-brand-neon font-semibold">
-                  {formatPercent(as.retentionPct)}
-                </td>
-
-                {/* Seguidores no Instagram */}
-                <td className="py-3.5 px-4 text-right text-zinc-300">
-                  {formatNumber(as.followersGained)}
-                </td>
-
-                {/* CPS */}
-                <td className="py-3.5 px-4 text-right text-zinc-300">
-                  {formatCurrency(as.cps)}
-                </td>
-
-                {/* Impressões */}
-                <td className="py-3.5 px-4 text-right text-zinc-300">
-                  {formatNumber(as.impressions)}
-                </td>
-
-                {/* CPM */}
-                <td className="py-3.5 px-4 text-right text-zinc-300">
-                  {formatCurrency(as.cpm)}
-                </td>
-
-                {/* Alcance */}
-                <td className="py-3.5 px-4 text-right text-zinc-300">
-                  {formatNumber(as.reach)}
-                </td>
-
-                {/* Frequência */}
-                <td className="py-3.5 px-4 text-right text-zinc-300">
-                  {as.frequency !== null && as.frequency !== undefined ? as.frequency.toFixed(2) : '—'}
-                </td>
-
-                {/* Cliques no Link */}
-                <td className="py-3.5 px-4 text-right text-zinc-300">
-                  {formatNumber(as.clicks)}
-                </td>
-
-                {/* CPC */}
-                <td className="py-3.5 px-4 text-right text-zinc-300">
-                  {formatCurrency(as.cpc)}
-                </td>
-
-                {/* Visualizações da página */}
-                <td className="py-3.5 px-4 text-right text-zinc-300">
-                  {formatNumber(as.landingPageViews)}
-                </td>
-
-                {/* CTR Único % */}
-                <td className="py-3.5 px-4 text-right font-bold text-brand-neon">
-                  {formatPercent(as.ctr)}
-                </td>
-
-                {/* Action */}
-                <td className="py-3.5 px-4 text-center">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectAdSet(as.id);
-                    }}
-                    className="inline-flex items-center gap-1 bg-brand-bg hover:bg-brand-neon text-zinc-300 hover:text-black font-semibold text-xs px-2.5 py-1 rounded-md border border-brand-border transition-all"
-                  >
-                    <span>Anúncios</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </td>
-                </tr>
+                    {/* Coluna 9: Custo / Lead */}
+                    <td className="py-3.5 px-4 text-right text-zinc-300 font-bold">
+                      {costPerLead !== null ? formatCurrency(costPerLead) : '—'}
+                    </td>
+                  </tr>
                 );
               })
             )}

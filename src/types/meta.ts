@@ -65,6 +65,7 @@ export interface MetaCampaign {
   spend: number | null;
   impressions: number | null;
   clicks: number | null;
+  inline_link_clicks?: number | null;
   ctr: number | null;
   cpc: number | null;
   conversions: number | null;
@@ -79,6 +80,7 @@ export interface MetaCampaign {
   followersGained: number | null;
   cps: number | null;
   landingPageViews: number | null;
+  actions?: any[];
   created_time: string;
   rawRecord?: any;
   lineage?: DataLineage;
@@ -97,6 +99,7 @@ export interface MetaAdSet {
   spend: number | null;
   impressions: number | null;
   clicks: number | null;
+  inline_link_clicks?: number | null;
   ctr: number | null;
   cpc: number | null;
   conversions: number | null;
@@ -111,6 +114,7 @@ export interface MetaAdSet {
   followersGained: number | null;
   cps: number | null;
   landingPageViews: number | null;
+  actions?: any[];
   rawRecord?: any;
   lineage?: DataLineage;
 }
@@ -131,6 +135,7 @@ export interface MetaAd {
   spend: number | null;
   impressions: number | null;
   clicks: number | null;
+  inline_link_clicks?: number | null;
   ctr: number | null;
   cpc: number | null;
   cpm: number | null;
@@ -144,6 +149,7 @@ export interface MetaAd {
   followersGained: number | null;
   cps: number | null;
   landingPageViews: number | null;
+  actions?: any[];
   roas: number | null;
   rawRecord?: any;
   lineage?: DataLineage;
@@ -151,10 +157,13 @@ export interface MetaAd {
 
 export interface GerenciadorSummary {
   investimentoTotal: number | null;
+  cpmMedio?: number | null;
+  ctrMedio: number | null;
+  connectRate?: number | null;
   impressioesTotal: number | null;
   cliquesTotal: number | null;
-  ctrMedio: number | null;
-  cpcMedio: number | null;
+  landingPageViewsTotal?: number | null;
+  cpcMedio?: number | null;
   leadsTotal: number | null;
   cpaMedio: number | null;
   roasMedio?: number | null;
