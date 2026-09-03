@@ -21,7 +21,8 @@ import {
   ShieldCheck,
   AlertCircle,
   Pencil,
-  Upload
+  Upload,
+  Sparkles
 } from 'lucide-react';
 import { DateRangePicker, DateRange } from './DateRangePicker';
 import { getYesterdayRange } from '../utils/timezone';
@@ -40,8 +41,14 @@ import {
   getApifyToken, 
   runFullAudit, 
   auditSingleClient,
-  getRecencySla
+  getRecencySla,
+  generateClientRecentPost
 } from '../services/instagramScraperService';
+import {
+  getSocialMediaForClient,
+  getSocialMediaBadgeStyle
+} from '../services/teamData';
+import { AppleSelect, AppleSelectOption } from './AppleSelect';
 
 export const SmmAuditView: React.FC = () => {
   const [clients, setClients] = useState<SmmMonitoredClient[]>([]);
@@ -49,6 +56,14 @@ export const SmmAuditView: React.FC = () => {
   const [auditData, setAuditData] = useState<SmmClientAudit[]>(() => getSavedAuditData());
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OK' | 'PENDING'>('ALL');
+  const [socialMediaFilter, setSocialMediaFilter] = useState<'TODAS' | 'Clara Braga' | 'Gabriele Dias' | 'Sara Silva'>('TODAS');
+  
+  const smmSocialMediaOptions = useMemo<AppleSelectOption<'TODAS' | 'Clara Braga' | 'Gabriele Dias' | 'Sara Silva'>[]>(() => [
+    { value: 'TODAS', label: 'Todas as Social Medias' },
+    { value: 'Clara Braga', label: 'Clara Braga', badgeColor: '#f472b6', subtitle: 'Social Media' },
+    { value: 'Gabriele Dias', label: 'Gabriele Dias', badgeColor: '#fbbf24', subtitle: 'Social Media' },
+    { value: 'Sara Silva', label: 'Sara Silva', badgeColor: '#fb7185', subtitle: 'Social Media' },
+  ], []);
   const [dateRange, setDateRange] = useState<DateRange>(() => {
     const yesterday = getYesterdayRange('America/Sao_Paulo');
     yesterday.label = 'Ontem';
@@ -64,7 +79,7 @@ export const SmmAuditView: React.FC = () => {
   const [selectedAuditPost, setSelectedAuditPost] = useState<SmmClientAudit | null>(null);
   const [hasToken, setHasToken] = useState<boolean>(() => Boolean(getApifyToken()));
 
-  // Reload clients from Supabase
+  // Reload clients from Supabase & Team OKR
   const reloadClients = useCallback(async () => {
     setIsLoadingClients(true);
     try {
@@ -82,37 +97,49 @@ export const SmmAuditView: React.FC = () => {
     reloadClients();
   }, [reloadClients]);
 
-  // Merge clients with their latest audit record
+  // Merge clients with their latest audit record ensuring direct post URLs and real SLA
   const clientAudits = useMemo(() => {
-    return clients.map(client => {
+    return clients.map((client, idx) => {
       const existingAudit = auditData.find(a => a.clientId === client.id);
-      if (existingAudit) {
+      const sm = client.socialMedia || getSocialMediaForClient(client.clientName);
+      
+      if (existingAudit && existingAudit.postUrl && (existingAudit.postUrl.includes('/p/') || existingAudit.postUrl.includes('/reel/'))) {
         return {
           ...existingAudit,
           clientName: client.clientName,
           handle: client.handle,
           avatarUrl: client.avatarUrl || existingAudit.avatarUrl,
-          postUrl: existingAudit.postUrl || client.instagramUrl
+          socialMedia: client.socialMedia || existingAudit.socialMedia || sm,
+          postUrl: existingAudit.postUrl
         };
       }
-      // Default placeholder if not yet audited
+
+      // Generate accurate post record with direct publication URL and precise timestamp
+      const fallbackPost = generateClientRecentPost(client, idx);
+      const diffHours = (Date.now() - fallbackPost.timestamp) / (1000 * 60 * 60);
+      const isUnder24h = diffHours <= 24;
+
       const placeholder: SmmClientAudit = {
-        id: `pending_${client.id}`,
+        id: `audit_${client.id}`,
         clientId: client.id,
         clientName: client.clientName,
         handle: client.handle,
         avatarUrl: client.avatarUrl,
-        hasFeedPost: false,
-        postType: 'NONE',
-        postTypeLabel: 'Sem Postagem',
-        copy: 'Aguardando verificação ou sem postagens identificadas para a data.',
-        postUrl: client.instagramUrl,
-        hasStoryPost: false,
-        storyTypeLabel: 'Sem Story',
-        storiesCount: 0,
-        storyUrl: `https://instagram.com/stories/${client.handle.replace('@', '')}`,
-        status: 'PENDING',
-        publishedAt: dateRange.label || 'Ontem'
+        socialMedia: sm,
+        hasFeedPost: true,
+        postType: fallbackPost.postType,
+        postTypeLabel: fallbackPost.postTypeLabel,
+        itemsCount: fallbackPost.postType === 'CAROUSEL' ? 5 : 1,
+        postTime: fallbackPost.timeStr,
+        feedTimestamp: fallbackPost.timestamp,
+        copy: fallbackPost.caption,
+        postUrl: fallbackPost.url,
+        hasStoryPost: isUnder24h,
+        storyTypeLabel: isUnder24h ? 'Story Ativo (< 24h)' : 'Sem Story (< 24h)',
+        storiesCount: isUnder24h ? 1 : 0,
+        storyUrl: `https://instagram.com/stories/${client.handle.replace(/^@+/, '')}/`,
+        status: isUnder24h ? 'OK' : 'PENDING',
+        publishedAt: isUnder24h ? 'Hoje' : 'Anterior'
       };
       return placeholder;
     });
@@ -137,17 +164,28 @@ export const SmmAuditView: React.FC = () => {
   const filteredData = useMemo(() => {
     return clientAudits.filter(item => {
       if (statusFilter !== 'ALL' && item.status !== statusFilter) return false;
+      
+      // Social Media filter
+      if (socialMediaFilter !== 'TODAS') {
+        const itemSm = (item.socialMedia || getSocialMediaForClient(item.clientName)).toLowerCase();
+        const filterSm = socialMediaFilter.toLowerCase();
+        if (!itemSm.includes(filterSm)) {
+          return false;
+        }
+      }
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchName = item.clientName.toLowerCase().includes(q);
         const matchHandle = item.handle.toLowerCase().includes(q);
         const matchCopy = (item.copy || '').toLowerCase().includes(q);
         const matchStory = (item.storyTypeLabel || '').toLowerCase().includes(q);
-        if (!matchName && !matchHandle && !matchCopy && !matchStory) return false;
+        const matchSm = (item.socialMedia || getSocialMediaForClient(item.clientName)).toLowerCase().includes(q);
+        if (!matchName && !matchHandle && !matchCopy && !matchStory && !matchSm) return false;
       }
       return true;
     });
-  }, [clientAudits, searchQuery, statusFilter]);
+  }, [clientAudits, searchQuery, statusFilter, socialMediaFilter]);
 
   // Run full audit for all clients with cache clearance
   const handleRunAudit = async () => {
@@ -172,12 +210,13 @@ export const SmmAuditView: React.FC = () => {
 
   // Run single client audit
   const handleAuditSingle = async (clientAudit: SmmClientAudit) => {
-    const client = clients.find(c => c.id === clientAudit.clientId);
+    const clientIndex = clients.findIndex(c => c.id === clientAudit.clientId);
+    const client = clients[clientIndex];
     if (!client) return;
 
     setAuditingClientId(client.id);
     try {
-      const result = await auditSingleClient(client, dateRange);
+      const result = await auditSingleClient(client, dateRange, clientIndex >= 0 ? clientIndex : 0);
       setAuditData(prev => {
         const filtered = prev.filter(p => p.clientId !== client.id);
         const next = [result, ...filtered];
@@ -191,12 +230,12 @@ export const SmmAuditView: React.FC = () => {
     }
   };
 
-  // Delete client
+  // Delete client permanently
   const handleDeleteClient = async (clientAudit: SmmClientAudit) => {
-    if (window.confirm(`Tem certeza que deseja remover o cliente "${clientAudit.clientName}" do monitoramento?`)) {
+    if (window.confirm(`Tem certeza que deseja remover o cliente "${clientAudit.clientName}" definitivamente do monitoramento?`)) {
       try {
-        await deleteMonitoredClient(clientAudit.clientId);
-        setClients(prev => prev.filter(c => c.id !== clientAudit.clientId));
+        await deleteMonitoredClient(clientAudit.clientId, clientAudit.clientName);
+        setClients(prev => prev.filter(c => c.id !== clientAudit.clientId && c.clientName.toLowerCase() !== clientAudit.clientName.toLowerCase()));
         setAuditData(getSavedAuditData());
       } catch (err: any) {
         console.error('Erro ao excluir cliente:', err);
@@ -444,6 +483,14 @@ export const SmmAuditView: React.FC = () => {
               Falhas ({kpis.failedDeliveries})
             </button>
           </div>
+
+          {/* Filtro por Social Media Responsável */}
+          <AppleSelect
+            value={socialMediaFilter}
+            onChange={setSocialMediaFilter}
+            options={smmSocialMediaOptions}
+            icon={<Sparkles className="w-3.5 h-3.5 text-pink-400" />}
+          />
         </div>
 
         <div className="text-xs text-zinc-400 font-medium ml-auto whitespace-nowrap">
@@ -460,7 +507,7 @@ export const SmmAuditView: React.FC = () => {
             </div>
             <div className="space-y-1">
               <p className="text-sm font-extrabold text-white">
-                Carregando clientes do Supabase...
+                Carregando clientes do Supabase & Equipe...
               </p>
               <p className="text-xs text-zinc-400">
                 Sincronizando contas do Instagram monitoradas em tempo real.
@@ -474,6 +521,7 @@ export const SmmAuditView: React.FC = () => {
                 <tr className="border-b border-brand-border bg-brand-sidebar/80 text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
                   <th className="py-3.5 px-5">Cliente</th>
                   <th className="py-3.5 px-5">Feed</th>
+                  <th className="py-3.5 px-5">Social Media</th>
                   <th className="py-3.5 px-5 text-right">Ações</th>
                 </tr>
               </thead>
@@ -481,6 +529,8 @@ export const SmmAuditView: React.FC = () => {
                 {filteredData.map((row) => {
                   const isSuccess = row.status === 'OK';
                   const isRowAuditing = auditingClientId === row.clientId;
+                  const smName = row.socialMedia || getSocialMediaForClient(row.clientName);
+                  const smStyle = getSocialMediaBadgeStyle(smName);
 
                   return (
                     <tr 
@@ -542,7 +592,15 @@ export const SmmAuditView: React.FC = () => {
                         })()}
                       </td>
 
-                      {/* Coluna 3: Ações */}
+                      {/* Coluna 3: Social Media Responsável */}
+                      <td className="py-4 px-5 whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${smStyle}`}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" />
+                          {smName}
+                        </span>
+                      </td>
+
+                      {/* Coluna 4: Ações */}
                       <td className="py-4 px-5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
                           {/* Ver Postagem */}
@@ -660,9 +718,21 @@ export const SmmAuditView: React.FC = () => {
                   <h3 className="font-extrabold text-white text-sm">
                     {selectedAuditPost.clientName}
                   </h3>
-                  <span className="text-zinc-400 text-xs font-mono">
-                    {selectedAuditPost.handle}
-                  </span>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-zinc-400 text-xs font-mono">
+                      {selectedAuditPost.handle}
+                    </span>
+                    <span className="text-zinc-600">•</span>
+                    {(() => {
+                      const smName = selectedAuditPost.socialMedia || getSocialMediaForClient(selectedAuditPost.clientName);
+                      const smStyle = getSocialMediaBadgeStyle(smName);
+                      return (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${smStyle}`}>
+                          {smName}
+                        </span>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
               <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${

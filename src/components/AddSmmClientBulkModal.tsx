@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   X, 
   Upload, 
@@ -14,6 +14,10 @@ import {
   cleanInstagramHandle, 
   SmmMonitoredClient 
 } from '../services/instagramScraperService';
+import { 
+  getSocialMediaForClient, 
+  getSocialMediaBadgeStyle 
+} from '../services/teamData';
 
 interface AddSmmClientBulkModalProps {
   isOpen: boolean;
@@ -258,21 +262,30 @@ export const AddSmmClientBulkModal: React.FC<AddSmmClientBulkModalProps> = React
                 Pré-visualização ({validRows.length} identificados):
               </span>
               <div className="max-h-36 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900/60 divide-y divide-zinc-800/60 text-xs custom-scrollbar">
-                {validRows.slice(0, 10).map((row, idx) => (
-                  <div key={idx} className="p-2.5 px-3 flex items-center justify-between hover:bg-zinc-800/30">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-6 h-6 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] text-pink-400 font-bold border border-zinc-700 shrink-0">
-                        <Instagram className="w-3 h-3" />
+                {validRows.slice(0, 10).map((row, idx) => {
+                  const sm = getSocialMediaForClient(row.clientName);
+                  const smStyle = getSocialMediaBadgeStyle(sm);
+                  return (
+                    <div key={idx} className="p-2.5 px-3 flex items-center justify-between hover:bg-zinc-800/30">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-6 h-6 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] text-pink-400 font-bold border border-zinc-700 shrink-0">
+                          <Instagram className="w-3 h-3" />
+                        </div>
+                        <span className="font-bold text-white truncate max-w-[200px]">
+                          {row.clientName}
+                        </span>
                       </div>
-                      <span className="font-bold text-white truncate max-w-[200px]">
-                        {row.clientName}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${smStyle}`}>
+                          {sm}
+                        </span>
+                        <span className="font-mono text-zinc-400 text-[11px]">
+                          @{row.cleanHandle}
+                        </span>
+                      </div>
                     </div>
-                    <span className="font-mono text-zinc-400 text-[11px]">
-                      @{row.cleanHandle}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
                 {validRows.length > 10 && (
                   <div className="p-2 text-center text-[11px] text-zinc-500 italic bg-zinc-900/90">
                     + {validRows.length - 10} outros clientes na lista...

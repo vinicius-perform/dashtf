@@ -37,23 +37,21 @@ export const InstagramAvatar: React.FC<InstagramAvatarProps> = ({
 
   const handleError = () => {
     if (retryStage === 0) {
-      // Stage 1: Try unavatar if handle exists and current was custom url
+      setRetryStage(1);
+      // Se tinha avatarUrl customizado, tenta via proxy wsrv.nl para contornar bloqueios de CORS/hotlink
+      if (avatarUrl && avatarUrl.trim() && !avatarUrl.includes('wsrv.nl')) {
+        setImgSrc(`https://wsrv.nl/?url=${encodeURIComponent(avatarUrl.trim())}&w=160&h=160&fit=cover&output=webp`);
+        return;
+      }
+      // Se não, tenta unavatar via handle
       if (cleanHandle && imgSrc !== `https://unavatar.io/instagram/${cleanHandle}`) {
-        setRetryStage(1);
         setImgSrc(`https://unavatar.io/instagram/${cleanHandle}`);
         return;
       }
-      // Or try wsrv.nl proxy to bypass Instagram hotlink/CORS blocks
-      if (avatarUrl && avatarUrl.trim()) {
-        setRetryStage(2);
-        setImgSrc(`https://wsrv.nl/?url=${encodeURIComponent(avatarUrl.trim())}&w=150&h=150&fit=cover&output=webp`);
-        return;
-      }
     } else if (retryStage === 1) {
-      // Stage 2: Try wsrv proxy
-      if (avatarUrl && avatarUrl.trim()) {
-        setRetryStage(2);
-        setImgSrc(`https://wsrv.nl/?url=${encodeURIComponent(avatarUrl.trim())}&w=150&h=150&fit=cover&output=webp`);
+      setRetryStage(2);
+      if (cleanHandle && !imgSrc?.includes('wsrv.nl')) {
+        setImgSrc(`https://wsrv.nl/?url=${encodeURIComponent(`https://unavatar.io/instagram/${cleanHandle}`)}&w=160&h=160&fit=cover&output=webp`);
         return;
       }
     }

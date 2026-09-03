@@ -18,6 +18,7 @@ import {
   cleanInstagramHandle, 
   SmmMonitoredClient 
 } from '../services/instagramScraperService';
+import { getSocialMediaForClient } from '../services/teamData';
 import { InstagramAvatar } from './InstagramAvatar';
 
 interface AddSmmClientModalProps {
@@ -38,6 +39,7 @@ export const AddSmmClientModal: React.FC<AddSmmClientModalProps> = React.memo(({
   const [clientName, setClientName] = useState('');
   const [instagramInput, setInstagramInput] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [socialMedia, setSocialMedia] = useState('Sara Silva');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -50,15 +52,26 @@ export const AddSmmClientModal: React.FC<AddSmmClientModalProps> = React.memo(({
         setClientName(clientToEdit.clientName || '');
         setInstagramInput(clientToEdit.instagramUrl || clientToEdit.handle || '');
         setAvatarUrl(clientToEdit.avatarUrl || '');
+        setSocialMedia(clientToEdit.socialMedia || getSocialMediaForClient(clientToEdit.clientName));
       } else {
         setClientName('');
         setInstagramInput('');
         setAvatarUrl('');
+        setSocialMedia('Sara Silva');
       }
       setErrorMessage(null);
       setIsSubmitting(false);
     }
   }, [isOpen, clientToEdit]);
+
+  // Handle client name change with auto-detected social media
+  const handleClientNameChange = (name: string) => {
+    setClientName(name);
+    if (!isEditing && name.trim()) {
+      const autoSm = getSocialMediaForClient(name);
+      setSocialMedia(autoSm);
+    }
+  };
 
   // Auto-fill avatar when handle is typed if avatar is empty
   const handleAutoFetchAvatar = () => {
@@ -94,6 +107,7 @@ export const AddSmmClientModal: React.FC<AddSmmClientModalProps> = React.memo(({
 
       // If user didn't enter custom avatar, auto-set unavatar link as fallback
       const finalAvatar = avatarUrl.trim() || (parsed.cleanHandle ? `https://unavatar.io/instagram/${parsed.cleanHandle}` : undefined);
+      const finalSm = socialMedia || getSocialMediaForClient(clientName.trim());
 
       let saved: SmmMonitoredClient;
 
@@ -103,6 +117,7 @@ export const AddSmmClientModal: React.FC<AddSmmClientModalProps> = React.memo(({
           clientName: clientName.trim(),
           instagramInput: instagramInput.trim(),
           avatarUrl: finalAvatar,
+          socialMedia: finalSm,
           isActive: clientToEdit.isActive
         });
       } else {
@@ -110,6 +125,7 @@ export const AddSmmClientModal: React.FC<AddSmmClientModalProps> = React.memo(({
           clientName: clientName.trim(),
           instagramInput: instagramInput.trim(),
           avatarUrl: finalAvatar,
+          socialMedia: finalSm,
           isActive: true
         });
       }
@@ -122,7 +138,7 @@ export const AddSmmClientModal: React.FC<AddSmmClientModalProps> = React.memo(({
       setIsSubmitting(false);
       setErrorMessage(err?.message || 'Falha ao salvar cliente.');
     }
-  }, [clientName, instagramInput, avatarUrl, parsed.cleanHandle, isEditing, clientToEdit, onClientSaved, onClose]);
+  }, [clientName, instagramInput, avatarUrl, socialMedia, parsed.cleanHandle, isEditing, clientToEdit, onClientSaved, onClose]);
 
   if (!isOpen) return null;
 
@@ -182,11 +198,28 @@ export const AddSmmClientModal: React.FC<AddSmmClientModalProps> = React.memo(({
               type="text"
               placeholder="Ex: Dra. Mariella Palmeira ou Clínica Harmonize"
               value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
+              onChange={(e) => handleClientNameChange(e.target.value)}
               className="w-full bg-brand-bg border border-brand-border rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-brand-neon transition-all"
               required
               autoFocus
             />
+          </div>
+
+          {/* Social Media Responsável */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-pink-400" />
+              Social Media Responsável *
+            </label>
+            <select
+              value={socialMedia}
+              onChange={(e) => setSocialMedia(e.target.value)}
+              className="w-full bg-brand-bg border border-brand-border rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-brand-neon transition-all cursor-pointer font-semibold"
+            >
+              <option value="Clara Braga">Clara Braga (Social Media)</option>
+              <option value="Gabriele Dias">Gabriele Dias (Social Media)</option>
+              <option value="Sara Silva">Sara Silva (Social Media)</option>
+            </select>
           </div>
 
           {/* Link ou @ do Instagram */}
