@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Lock, Mail, Eye, EyeOff, Loader2, AlertCircle, ArrowRight } from 'lucide-react';
 import { Logo } from './Logo';
+import { validateSystemUser, setLocalAuthUser } from '../services/systemUsers';
 
 interface LoginViewProps {
   onLoginSuccess: () => void;
@@ -25,19 +26,35 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     setErrorMessage(null);
 
     try {
-      // 1. Try standard sign-in first
+      // 1. Check if user is a pre-configured system/admin user
+      const systemUser = validateSystemUser(email, password);
+      if (systemUser) {
+        console.log('✅ Authenticated as System User:', systemUser.email);
+        setLocalAuthUser(systemUser);
+        
+        // Background attempt to sync with Supabase session without blocking
+        supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password
+        }).catch(() => {});
+
+        onLoginSuccess();
+        return;
+      }
+
+      // 2. Try standard sign-in with Supabase
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password
       });
 
       if (!signInError && signInData.session) {
-        console.log('✅ Logged in successfully:', signInData.user?.email);
+        console.log('✅ Logged in successfully via Supabase:', signInData.user?.email);
         onLoginSuccess();
         return;
       }
 
-      // 2. Intercept "Invalid login credentials" or user not found to auto-signup behind scenes
+      // 3. Intercept "Invalid login credentials" or user not found to auto-signup behind scenes
       if (signInError && (
         signInError.message.toLowerCase().includes('invalid login credentials') ||
         signInError.message.toLowerCase().includes('user not found') ||
@@ -57,7 +74,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         if (signUpData.session || signUpData.user) {
           console.log('✅ Auto-signup & login successful for:', signUpData.user?.email);
           
-          // Re-attempt sign in if session wasn't immediately returned
           if (!signUpData.session) {
             const { error: secondSignInErr } = await supabase.auth.signInWithPassword({
               email: email.trim(),

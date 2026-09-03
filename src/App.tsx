@@ -42,6 +42,7 @@ import {
   sync7DaysAttributionWindow, 
   purgeExpiredSnapshots 
 } from './services/meta/dailyInsightsEngine';
+import { getLocalAuthUser, clearLocalAuthUser } from './services/systemUsers';
 
 export function App() {
   // Auth Session State & Loading Guard
@@ -69,16 +70,46 @@ export function App() {
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [lastUpdatedTime, setLastUpdatedTime] = useState<string>(new Date().toLocaleString('pt-BR'));
 
-  // 1. Check Supabase Auth Session Persistence on App Mount (Prevents F5 flash)
-  // 1. Check Supabase Auth Session Persistence on App Mount (Prevents F5 flash)
+  // 1. Check Supabase Auth Session and System User Session Persistence on App Mount
   useEffect(() => {
+    const localUser = getLocalAuthUser();
+    if (localUser) {
+      setSession({
+        user: localUser,
+        access_token: 'system_authenticated'
+      });
+      setIsAuthChecking(false);
+    }
+
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
-      setSession(initialSession);
+      if (initialSession) {
+        setSession(initialSession);
+      } else {
+        const currentLocal = getLocalAuthUser();
+        if (currentLocal) {
+          setSession({
+            user: currentLocal,
+            access_token: 'system_authenticated'
+          });
+        }
+      }
       setIsAuthChecking(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-      setSession(currentSession);
+      if (currentSession) {
+        setSession(currentSession);
+      } else {
+        const currentLocal = getLocalAuthUser();
+        if (currentLocal) {
+          setSession({
+            user: currentLocal,
+            access_token: 'system_authenticated'
+          });
+        } else {
+          setSession(null);
+        }
+      }
       setIsAuthChecking(false);
     });
 
@@ -239,7 +270,8 @@ export function App() {
   }, []);
 
   const handleLogout = useCallback(async () => {
-    await supabase.auth.signOut();
+    clearLocalAuthUser();
+    await supabase.auth.signOut().catch(() => {});
     setSession(null);
   }, []);
 
@@ -270,9 +302,17 @@ export function App() {
     return (
       <LoginView 
         onLoginSuccess={() => {
-          supabase.auth.getSession().then(({ data: { session: newSession } }) => {
-            setSession(newSession);
-          });
+          const currentLocal = getLocalAuthUser();
+          if (currentLocal) {
+            setSession({
+              user: currentLocal,
+              access_token: 'system_authenticated'
+            });
+          } else {
+            supabase.auth.getSession().then(({ data: { session: newSession } }) => {
+              setSession(newSession);
+            });
+          }
         }} 
       />
     );
