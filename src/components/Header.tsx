@@ -30,6 +30,7 @@ interface HeaderProps {
   setSearchQuery: (q: string) => void;
   onOpenDebug: () => void;
   lastUpdatedTime?: string;
+  session?: any;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -45,9 +46,44 @@ export const Header: React.FC<HeaderProps> = ({
   searchQuery,
   setSearchQuery,
   onOpenDebug,
-  lastUpdatedTime
+  lastUpdatedTime,
+  session
 }) => {
   const displayTimestamp = lastUpdatedTime || new Date().toLocaleString('pt-BR');
+
+  const user = session?.user;
+  const userEmail: string = user?.email || '';
+  const userName: string = user?.user_metadata?.name || user?.name || (userEmail ? userEmail.split('@')[0] : 'Usuário');
+  
+  // Format username (e.g. antonio.neto, viniciusmarinhods)
+  const displayUsername = userEmail ? userEmail.split('@')[0] : (userName.toLowerCase().replace(/\s+/g, ''));
+  
+  // Format initials (e.g. AN for Antonio Neto, VM for Vinicius Marinho)
+  const userInitials = (() => {
+    if (user?.user_metadata?.name || user?.name) {
+      const parts = (user.user_metadata?.name || user.name).trim().split(/\s+/);
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+      }
+      return parts[0].slice(0, 2).toUpperCase();
+    }
+    if (userEmail) {
+      const prefix = userEmail.split('@')[0];
+      const dotParts = prefix.split(/[\._\-]/);
+      if (dotParts.length >= 2) {
+        return (dotParts[0][0] + dotParts[1][0]).toUpperCase();
+      }
+      return prefix.slice(0, 2).toUpperCase();
+    }
+    return 'AN';
+  })();
+
+  const userRole = (user?.user_metadata?.role || user?.role || 'admin').toLowerCase();
+  const isSuper = userEmail.toLowerCase().includes('viniciusmarinhods');
+  const isAdmin = userRole === 'admin' || userEmail.toLowerCase().includes('dottech.ai') || isSuper;
+  
+  const badgeLabel = isSuper ? 'SUPER' : isAdmin ? 'ADMIN' : 'GESTOR';
+  const roleSubtitle = isSuper ? 'Supervisor' : isAdmin ? 'Administrador' : 'Gestor de Tráfego';
 
   return (
     <header className="bg-brand-sidebar border-b border-brand-border px-6 py-4 space-y-4">
@@ -124,19 +160,25 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Exportar PDF</span>
           </button>
 
-          {/* User Profile matching reference screenshot */}
-          <div className="flex items-center gap-2 pl-2 border-l border-brand-border">
-            <div className="w-8 h-8 rounded-full bg-brand-neon text-black font-bold flex items-center justify-center text-xs shadow-md">
-              VM
+          {/* Dynamic User Profile */}
+          <div className="flex items-center gap-2.5 pl-3 border-l border-brand-border">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-neon to-emerald-400 text-black font-black flex items-center justify-center text-xs shadow-md">
+              {userInitials}
             </div>
             <div className="flex flex-col text-left">
-              <span className="text-xs font-bold text-white flex items-center gap-1">
-                viniciusmarinhods
-                <span className="bg-yellow-400/20 text-yellow-400 text-[9px] font-extrabold px-1 rounded uppercase">
-                  SUPER
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <span className="truncate max-w-[130px]">{displayUsername}</span>
+                <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded uppercase ${
+                  badgeLabel === 'SUPER' 
+                    ? 'bg-yellow-400/20 text-yellow-400 border border-yellow-400/30' 
+                    : badgeLabel === 'ADMIN'
+                    ? 'bg-brand-neon/20 text-brand-neon border border-brand-neon/30'
+                    : 'bg-zinc-700/60 text-zinc-300 border border-zinc-600/40'
+                }`}>
+                  {badgeLabel}
                 </span>
               </span>
-              <span className="text-[10px] text-zinc-400">Supervisor</span>
+              <span className="text-[10px] text-zinc-400">{roleSubtitle}</span>
             </div>
           </div>
         </div>

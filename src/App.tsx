@@ -349,6 +349,7 @@ export function App() {
           setSearchQuery={setSearchQuery}
           onOpenDebug={() => setIsDebugOpen(true)}
           lastUpdatedTime={lastUpdatedTime}
+          session={session}
         />
 
         {/* Dynamic Screen View */}

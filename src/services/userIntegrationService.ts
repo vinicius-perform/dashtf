@@ -41,8 +41,8 @@ export async function fetchUserMetaToken(userId: string, userEmail?: string): Pr
     console.error('❌ [SUPABASE CLOUD SYNC] Exceção/Timeout ao buscar Meta Token no Supabase:', err?.message || err);
   }
 
-  // Fallback for administrative account (viniciusmarinhods@gmail.com)
-  if (userEmail === 'viniciusmarinhods@gmail.com') {
+  // Fallback for administrative accounts
+  if (userEmail === 'viniciusmarinhods@gmail.com' || userEmail === 'antonio.neto@dottech.ai') {
     console.log('🔑 [SUPABASE CLOUD SYNC] E-mail admin detectado. Aplicando token Meta administrativo.');
     // Background seed into Supabase user_integrations
     saveUserMetaToken(userId, ADMIN_META_TOKEN).catch(() => {});
