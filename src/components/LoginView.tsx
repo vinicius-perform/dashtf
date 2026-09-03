@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Lock, Mail, Eye, EyeOff, Loader2, AlertCircle, ArrowRight } from 'lucide-react';
 import { Logo } from './Logo';
 import { validateSystemUser, setLocalAuthUser } from '../services/systemUsers';
+import { navigate } from '../lib/router';
 
 interface LoginViewProps {
   onLoginSuccess: () => void;
@@ -192,6 +193,33 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             )}
           </button>
         </form>
+
+        {/* Consentimento / Links legais */}
+        <p className="text-center text-[11px] text-zinc-500 leading-relaxed">
+          Ao acessar o painel, você concorda com os{' '}
+          <a
+            href="/termos"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/termos');
+            }}
+            className="text-brand-neon hover:underline font-semibold"
+          >
+            Termos de Serviço
+          </a>{' '}
+          e a{' '}
+          <a
+            href="/privacidade"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/privacidade');
+            }}
+            className="text-brand-neon hover:underline font-semibold"
+          >
+            Política de Privacidade
+          </a>
+          .
+        </p>
       </div>
     </div>
   );
