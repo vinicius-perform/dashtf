@@ -14,7 +14,8 @@ export function json(body: unknown, status = 200): Response {
 }
 
 export function serviceClient() {
-  return createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SECRET_KEY') || '';
+  return createClient(Deno.env.get('SUPABASE_URL')!, key, {
     auth: { persistSession: false }
   });
 }
