@@ -1,14 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { GerenciadorView } from './components/GerenciadorView';
-import { MiningView } from './components/MiningView';
 import { IntegrationsView } from './components/IntegrationsView';
-import { CrmLeadsView } from './components/CrmLeadsView';
-import { CreativesView } from './components/CreativesView';
-import { SmmAuditView } from './components/SmmAuditView';
-import { TeamOkrView } from './components/TeamOkrView';
+import { GestaoTarefasView } from './components/GestaoTarefasView';
+import { AIAssistantSidebar } from './components/AIAssistantSidebar';
+import { AISettingsModal } from './components/AISettingsModal';
+import { useAiContext } from './hooks/useAiContext';
 import { MetaDebugModal } from './components/MetaDebugModal';
+import { 
+  fetchAgencyPortfolio, 
+  AgencyPortfolioItem 
+} from './services/agencyPortfolioService';
 import { 
   getSavedMetaConfig, 
   saveMetaConfig,
@@ -18,7 +21,9 @@ import {
   fetchAccountInsights,
   computeSummaryMetrics, 
   fetchAdAccounts,
-  extractLeadsFromActions
+  extractLeadsFromActions,
+  ADMIN_META_TOKEN,
+  BM_ACCOUNTS_DICTIONARY
 } from './services/metaDataEngine';
 import { 
   fetchUserMetaToken 
@@ -50,13 +55,72 @@ export function App() {
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'gerenciador' | 'mineracao' | 'leads' | 'criativos' | 'integracoes' | 'smm-audit' | 'equipe-okrs'>('gerenciador');
+  const [activeTab, setActiveTab] = useState<'gerenciador' | 'tarefas' | 'integracoes'>('gerenciador');
   const [activeLevel, setActiveLevel] = useState<string>('campanhas');
   const [metaConfig, setMetaConfig] = useState<MetaConfig>(getSavedMetaConfig());
-  const [accounts, setAccounts] = useState<MetaAdAccount[]>([]);
+  const [accounts, setAccounts] = useState<MetaAdAccount[]>(() => BM_ACCOUNTS_DICTIONARY['1098475893049001'] || []);
   const [selectedAccountId, setSelectedAccountId] = useState<string>(metaConfig.selectedAccountId || '1115861513053539');
 
-  const selectedAccObj = accounts.find(a => a.id === selectedAccountId);
+  // Carteira de clientes gerenciados (salva no Supabase agency_portfolio)
+  const [portfolioItems, setPortfolioItems] = useState<AgencyPortfolioItem[]>([]);
+
+  const loadPortfolio = useCallback(async () => {
+    try {
+      const items = await fetchAgencyPortfolio();
+      if (items && items.length > 0) {
+        setPortfolioItems(items);
+      }
+    } catch (e) {
+      console.warn('Falha ao carregar carteira de clientes:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPortfolio();
+  }, [loadPortfolio]);
+
+  // Contas da carteira gerenciada ativa
+  const managedAccounts = useMemo(() => {
+    if (portfolioItems.length > 0) {
+      return portfolioItems.map(p => {
+        const match = accounts.find(a => a.id === p.account_id);
+        return match || {
+          id: p.account_id,
+          raw_id: `act_${p.account_id}`,
+          name: p.account_name,
+          account_status: 1,
+          currency: 'BRL',
+          timezone_name: 'America/Sao_Paulo'
+        };
+      });
+    }
+    return accounts;
+  }, [portfolioItems, accounts]);
+
+  // Sincroniza a conta selecionada para que pertença à carteira gerenciada
+  useEffect(() => {
+    if (managedAccounts.length > 0 && !managedAccounts.some(a => a.id === selectedAccountId)) {
+      setSelectedAccountId(managedAccounts[0].id);
+    }
+  }, [managedAccounts, selectedAccountId]);
+
+  // Carrega contas de anúncios em tempo real via Meta Graph API
+  useEffect(() => {
+    const token = metaConfig.accessToken?.trim() || ADMIN_META_TOKEN;
+    if (!token) return;
+
+    fetchAdAccounts(token)
+      .then((fetchedAccs) => {
+        if (fetchedAccs && fetchedAccs.length > 0) {
+          setAccounts(fetchedAccs);
+        }
+      })
+      .catch((err) => {
+        console.warn('Falha ao sincronizar contas de anúncios:', err);
+      });
+  }, [metaConfig.accessToken]);
+
+  const selectedAccObj = managedAccounts.find(a => a.id === selectedAccountId);
   const accountTimezone = selectedAccObj?.timezone_name || 'America/Sao_Paulo';
 
   const [dateRange, setDateRange] = useState<DateRange>(() => getTodayRange(accountTimezone));
@@ -68,7 +132,18 @@ export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
+  const [isAiSettingsOpen, setIsAiSettingsOpen] = useState<boolean>(false);
   const [lastUpdatedTime, setLastUpdatedTime] = useState<string>(new Date().toLocaleString('pt-BR'));
+
+  // Contexto da tela em tempo real para o Assistente de IA (Fase 4 - alimentado pela carteira gerenciada)
+  const { context: aiContext } = useAiContext({
+    activeTab,
+    accounts: managedAccounts,
+    selectedAccountId,
+    summary,
+    ads,
+    campaigns
+  });
 
   // 1. Check Supabase Auth Session and System User Session Persistence on App Mount
   useEffect(() => {
@@ -338,7 +413,7 @@ export function App() {
         <Header
           activeTab={activeTab}
           metaConfig={metaConfig}
-          accounts={accounts}
+          accounts={managedAccounts}
           selectedAccountId={selectedAccountId}
           setSelectedAccountId={handleSelectAccount}
           dateRange={dateRange}
@@ -364,35 +439,17 @@ export function App() {
               setActiveLevel={setActiveLevel}
               onToggleCampaignStatus={handleToggleCampaignStatus}
               isLoading={isLoading}
-            />
-          )}
-
-          {activeTab === 'mineracao' && (
-            <MiningView onNavigateToGerenciador={() => setActiveTab('gerenciador')} />
-          )}
-
-          {activeTab === 'leads' && (
-            <CrmLeadsView isLoading={isLoading} />
-          )}
-
-          {activeTab === 'criativos' && (
-            <CreativesView
-              ads={ads}
-              campaigns={campaigns}
-              adsets={adsets}
-              isLoading={isLoading}
+              accounts={managedAccounts}
+              metaConfig={metaConfig}
               dateRange={dateRange}
-              setDateRange={setDateRange}
+              selectedAccountId={selectedAccountId}
+              setSelectedAccountId={handleSelectAccount}
               onRefresh={loadAllData}
             />
           )}
 
-          {activeTab === 'smm-audit' && (
-            <SmmAuditView />
-          )}
-
-          {activeTab === 'equipe-okrs' && (
-            <TeamOkrView />
+          {activeTab === 'tarefas' && (
+            <GestaoTarefasView accounts={managedAccounts} />
           )}
 
           {activeTab === 'integracoes' && (
@@ -403,6 +460,7 @@ export function App() {
               accounts={accounts}
               setAccounts={setAccounts}
               onRefreshData={loadAllData}
+              onPortfolioUpdated={loadPortfolio}
             />
           )}
         </main>
@@ -412,6 +470,18 @@ export function App() {
           isOpen={isDebugOpen}
           onClose={() => setIsDebugOpen(false)}
           config={metaConfig}
+        />
+
+        {/* Assistente de Tráfego com IA Nativo (Fase 4) */}
+        <AIAssistantSidebar
+          context={aiContext}
+          onOpenSettings={() => setIsAiSettingsOpen(true)}
+        />
+
+        {/* Modal de Configuração de Chave de API da IA */}
+        <AISettingsModal
+          isOpen={isAiSettingsOpen}
+          onClose={() => setIsAiSettingsOpen(false)}
         />
       </div>
     </div>

@@ -2,14 +2,10 @@ import React from 'react';
 import { Logo } from './Logo';
 import { 
   LayoutDashboard, 
-  Radar,
-  Users,
-  Layers,
+  CalendarCheck,
   Link2, 
   Settings,
-  LogOut,
-  CheckSquare,
-  UserCheck
+  LogOut
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -61,7 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
           )}
 
           <nav className="space-y-1">
-            {/* Gerenciador Button (Highlighted in Neon Yellow if Active) */}
+            {/* Gerenciador Button (Highlighted in Neon Green if Active) */}
             <button
               onClick={() => setActiveTab('gerenciador')}
               title={isCollapsed ? 'Gerenciador' : undefined}
@@ -75,74 +71,18 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
               {!isCollapsed && <span>Gerenciador</span>}
             </button>
 
-            {/* Mineração Button */}
+            {/* Gestão de Tarefas Button */}
             <button
-              onClick={() => setActiveTab('mineracao')}
-              title={isCollapsed ? 'Mineração' : undefined}
-              className={`w-full flex items-center ${isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'} rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'mineracao'
+              onClick={() => setActiveTab('tarefas')}
+              title={isCollapsed ? 'Gestão de Tarefas' : undefined}
+              className={`w-full flex items-center ${isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'} rounded-lg text-sm font-semibold transition-all ${
+                activeTab === 'tarefas'
                   ? 'bg-brand-neon text-black font-bold shadow-md shadow-brand-neon/20'
                   : 'text-zinc-300 hover:bg-zinc-800/60 hover:text-white'
               }`}
             >
-              <Radar className="w-4 h-4 shrink-0" />
-              {!isCollapsed && <span>Mineração</span>}
-            </button>
-
-            {/* Leads Button */}
-            <button
-              onClick={() => setActiveTab('leads')}
-              title={isCollapsed ? 'Leads' : undefined}
-              className={`w-full flex items-center ${isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'} rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'leads'
-                  ? 'bg-brand-neon text-black font-bold shadow-md shadow-brand-neon/20'
-                  : 'text-zinc-300 hover:bg-zinc-800/60 hover:text-white'
-              }`}
-            >
-              <UserCheck className="w-4 h-4 shrink-0" />
-              {!isCollapsed && <span>Leads</span>}
-            </button>
-
-            {/* Criativos Button */}
-            <button
-              onClick={() => setActiveTab('criativos')}
-              title={isCollapsed ? 'Criativos' : undefined}
-              className={`w-full flex items-center ${isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'} rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'criativos'
-                  ? 'bg-brand-neon text-black font-bold shadow-md shadow-brand-neon/20'
-                  : 'text-zinc-300 hover:bg-zinc-800/60 hover:text-white'
-              }`}
-            >
-              <Layers className="w-4 h-4 shrink-0" />
-              {!isCollapsed && <span>Criativos</span>}
-            </button>
-
-            {/* Auditoria SMM Button */}
-            <button
-              onClick={() => setActiveTab('smm-audit')}
-              title={isCollapsed ? 'Auditoria SMM' : undefined}
-              className={`w-full flex items-center ${isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'} rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'smm-audit'
-                  ? 'bg-brand-neon text-black font-bold shadow-md shadow-brand-neon/20'
-                  : 'text-zinc-300 hover:bg-zinc-800/60 hover:text-white'
-              }`}
-            >
-              <CheckSquare className="w-4 h-4 shrink-0" />
-              {!isCollapsed && <span>Auditoria SMM</span>}
-            </button>
-
-            {/* Equipe & OKRs Button */}
-            <button
-              onClick={() => setActiveTab('equipe-okrs')}
-              title={isCollapsed ? 'Equipe & OKRs' : undefined}
-              className={`w-full flex items-center ${isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'} rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'equipe-okrs'
-                  ? 'bg-brand-neon text-black font-bold shadow-md shadow-brand-neon/20'
-                  : 'text-zinc-300 hover:bg-zinc-800/60 hover:text-white'
-              }`}
-            >
-              <Users className="w-4 h-4 shrink-0" />
-              {!isCollapsed && <span>Equipe & OKRs</span>}
+              <CalendarCheck className="w-4 h-4 shrink-0" />
+              {!isCollapsed && <span>Gestão de Tarefas</span>}
             </button>
 
             {/* Integrações Meta Button */}

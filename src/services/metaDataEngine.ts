@@ -12,8 +12,8 @@ import {
 } from '../types/meta';
 
 export const ADMIN_META_TOKEN = 'EAAUCHCxqlm4BSXktFRiKzq7w1aa9ZC8iZApYGfhQNAdvWAdI48pJ7NWdN9xHHb9C38XuKd6qZBEN74fjlZBqRJE3vd7VPGtUXSMAAoLfVaT3R6DiehWmRuZCRcjefmDslZBfWOZB9uuMrHxWHqe99dMWsIn1zRVOLlAx8mJ6B2YUfoSsCfNL85EpZBZBMLWZBqrwZDZD';
-const GRAPH_API_BASE = 'https://graph.facebook.com/v19.0';
-const DEFAULT_API_VERSION = 'v19.0';
+export const GRAPH_API_BASE = 'https://graph.facebook.com/v19.0';
+export const DEFAULT_API_VERSION = 'v19.0';
 
 // ID Normalization Helpers
 export function normalizeAccountId(id: string): string {
@@ -53,6 +53,17 @@ export function getSavedMetaConfig(): MetaConfig {
     apiVersion: DEFAULT_API_VERSION
   };
 }
+
+export const BM_ACCOUNTS_DICTIONARY: Record<string, MetaAdAccount[]> = {
+  '1098475893049001': [
+    { id: '1115861513053539', raw_id: 'act_1115861513053539', name: 'CA02 - FA', account_status: 1, currency: 'BRL', timezone_name: 'America/Sao_Paulo' },
+    { id: '858751867277029', raw_id: 'act_858751867277029', name: 'CA04 - Paraíso da Baleia', account_status: 1, currency: 'BRL', timezone_name: 'America/Sao_Paulo' },
+    { id: '977087437378962', raw_id: 'act_977087437378962', name: 'CA01 - Dot Kayo', account_status: 1, currency: 'BRL', timezone_name: 'America/Sao_Paulo' },
+    { id: '448128631941716', raw_id: 'act_448128631941716', name: 'Silvia Bastos Almeida (#advogadoce)', account_status: 1, currency: 'BRL', timezone_name: 'America/Sao_Paulo' },
+    { id: '1046027674414222', raw_id: 'act_1046027674414222', name: 'Loira', account_status: 1, currency: 'BRL', timezone_name: 'America/Sao_Paulo' },
+    { id: '793119992411624', raw_id: 'act_793119992411624', name: 'NÃO', account_status: 3, currency: 'BRL', timezone_name: 'America/Sao_Paulo' }
+  ]
+};
 
 export function validateBMAndAccountRelationship(
   bmId: string | null | undefined, 
@@ -111,7 +122,7 @@ export async function fetchAdAccountsForBM(token: string, bmId: string): Promise
     try {
       const owned = await fetchAllPages(`${GRAPH_API_BASE}/${bmId}/owned_ad_accounts`, {
         access_token: cleanToken,
-        fields: 'id,name,account_status,currency,timezone_name',
+        fields: 'id,name,account_status,currency,timezone_name,balance,amount_spent,spend_cap,is_prepay_account,min_daily_budget',
         limit: 100
       });
       owned.forEach((acc: any) => {
@@ -123,7 +134,12 @@ export async function fetchAdAccountsForBM(token: string, bmId: string): Promise
           account_status: acc.account_status ?? 1,
           currency: acc.currency || 'BRL',
           timezone_name: acc.timezone_name || 'America/Sao_Paulo',
-          business_id: bmId
+          business_id: bmId,
+          balance: acc.balance !== undefined ? parseFloat(acc.balance) / 100 : 0,
+          amount_spent: acc.amount_spent !== undefined ? parseFloat(acc.amount_spent) / 100 : 0,
+          spend_cap: acc.spend_cap !== undefined ? parseFloat(acc.spend_cap) / 100 : 0,
+          is_prepay_account: Boolean(acc.is_prepay_account),
+          min_daily_budget: acc.min_daily_budget !== undefined ? parseFloat(acc.min_daily_budget) / 100 : 0
         });
       });
     } catch {}
@@ -132,7 +148,7 @@ export async function fetchAdAccountsForBM(token: string, bmId: string): Promise
     try {
       const client = await fetchAllPages(`${GRAPH_API_BASE}/${bmId}/client_ad_accounts`, {
         access_token: cleanToken,
-        fields: 'id,name,account_status,currency,timezone_name',
+        fields: 'id,name,account_status,currency,timezone_name,balance,amount_spent,spend_cap,is_prepay_account,min_daily_budget',
         limit: 100
       });
       client.forEach((acc: any) => {
@@ -145,7 +161,12 @@ export async function fetchAdAccountsForBM(token: string, bmId: string): Promise
             account_status: acc.account_status ?? 1,
             currency: acc.currency || 'BRL',
             timezone_name: acc.timezone_name || 'America/Sao_Paulo',
-            business_id: bmId
+            business_id: bmId,
+            balance: acc.balance !== undefined ? parseFloat(acc.balance) / 100 : 0,
+            amount_spent: acc.amount_spent !== undefined ? parseFloat(acc.amount_spent) / 100 : 0,
+            spend_cap: acc.spend_cap !== undefined ? parseFloat(acc.spend_cap) / 100 : 0,
+            is_prepay_account: Boolean(acc.is_prepay_account),
+            min_daily_budget: acc.min_daily_budget !== undefined ? parseFloat(acc.min_daily_budget) / 100 : 0
           });
         }
       });
@@ -207,7 +228,7 @@ export async function fetchAdAccounts(token: string): Promise<MetaAdAccount[]> {
     // 1. Fetch direct user ad accounts
     const directAccounts = await fetchAllPages(`${GRAPH_API_BASE}/me/adaccounts`, {
       access_token: cleanToken,
-      fields: 'id,name,account_status,currency,timezone_name,business',
+      fields: 'id,name,account_status,currency,timezone_name,business,balance,amount_spent,spend_cap,is_prepay_account,min_daily_budget',
       limit: 100
     });
 
@@ -221,7 +242,12 @@ export async function fetchAdAccounts(token: string): Promise<MetaAdAccount[]> {
         currency: acc.currency || 'BRL',
         timezone_name: acc.timezone_name || 'America/Sao_Paulo',
         business_id: acc.business?.id,
-        business_name: acc.business?.name
+        business_name: acc.business?.name,
+        balance: acc.balance !== undefined ? parseFloat(acc.balance) / 100 : 0,
+        amount_spent: acc.amount_spent !== undefined ? parseFloat(acc.amount_spent) / 100 : 0,
+        spend_cap: acc.spend_cap !== undefined ? parseFloat(acc.spend_cap) / 100 : 0,
+        is_prepay_account: Boolean(acc.is_prepay_account),
+        min_daily_budget: acc.min_daily_budget !== undefined ? parseFloat(acc.min_daily_budget) / 100 : 0
       });
     });
 
@@ -238,7 +264,7 @@ export async function fetchAdAccounts(token: string): Promise<MetaAdAccount[]> {
         try {
           const owned = await fetchAllPages(`${GRAPH_API_BASE}/${biz.id}/owned_ad_accounts`, {
             access_token: cleanToken,
-            fields: 'id,name,account_status,currency,timezone_name',
+            fields: 'id,name,account_status,currency,timezone_name,balance,amount_spent,spend_cap,is_prepay_account,min_daily_budget',
             limit: 100
           });
           owned.forEach((acc: any) => {
@@ -252,7 +278,12 @@ export async function fetchAdAccounts(token: string): Promise<MetaAdAccount[]> {
                 currency: acc.currency || 'BRL',
                 timezone_name: acc.timezone_name || 'America/Sao_Paulo',
                 business_id: biz.id,
-                business_name: biz.name
+                business_name: biz.name,
+                balance: acc.balance !== undefined ? parseFloat(acc.balance) / 100 : 0,
+                amount_spent: acc.amount_spent !== undefined ? parseFloat(acc.amount_spent) / 100 : 0,
+                spend_cap: acc.spend_cap !== undefined ? parseFloat(acc.spend_cap) / 100 : 0,
+                is_prepay_account: Boolean(acc.is_prepay_account),
+                min_daily_budget: acc.min_daily_budget !== undefined ? parseFloat(acc.min_daily_budget) / 100 : 0
               });
             }
           });
@@ -262,7 +293,7 @@ export async function fetchAdAccounts(token: string): Promise<MetaAdAccount[]> {
         try {
           const client = await fetchAllPages(`${GRAPH_API_BASE}/${biz.id}/client_ad_accounts`, {
             access_token: cleanToken,
-            fields: 'id,name,account_status,currency,timezone_name',
+            fields: 'id,name,account_status,currency,timezone_name,balance,amount_spent,spend_cap,is_prepay_account,min_daily_budget',
             limit: 100
           });
           client.forEach((acc: any) => {
@@ -276,7 +307,12 @@ export async function fetchAdAccounts(token: string): Promise<MetaAdAccount[]> {
                 currency: acc.currency || 'BRL',
                 timezone_name: acc.timezone_name || 'America/Sao_Paulo',
                 business_id: biz.id,
-                business_name: biz.name
+                business_name: biz.name,
+                balance: acc.balance !== undefined ? parseFloat(acc.balance) / 100 : 0,
+                amount_spent: acc.amount_spent !== undefined ? parseFloat(acc.amount_spent) / 100 : 0,
+                spend_cap: acc.spend_cap !== undefined ? parseFloat(acc.spend_cap) / 100 : 0,
+                is_prepay_account: Boolean(acc.is_prepay_account),
+                min_daily_budget: acc.min_daily_budget !== undefined ? parseFloat(acc.min_daily_budget) / 100 : 0
               });
             }
           });
@@ -288,6 +324,48 @@ export async function fetchAdAccounts(token: string): Promise<MetaAdAccount[]> {
   }
 
   return Array.from(accountMap.values());
+}
+
+/**
+ * Busca os dados de uma única conta de anúncios diretamente via GET /v19.0/act_{ID}
+ */
+export async function fetchSingleAdAccount(token: string, rawAccountId: string): Promise<MetaAdAccount | null> {
+  const cleanId = rawAccountId.replace(/^act_/i, '').replace(/\D/g, '').trim();
+  if (!cleanId) return null;
+
+  const cleanToken = token?.trim() || ADMIN_META_TOKEN;
+  try {
+    const res = await axios.get(`${GRAPH_API_BASE}/act_${cleanId}`, {
+      params: {
+        access_token: cleanToken,
+        fields: 'id,name,account_id,account_status,currency,timezone_name,balance,amount_spent,spend_cap,is_prepay_account,min_daily_budget'
+      },
+      timeout: 10000
+    });
+
+    const data = res.data;
+    if (data && data.name) {
+      const normId = normalizeAccountId(data.id || data.account_id || cleanId);
+      return {
+        id: normId,
+        raw_id: toActAccountId(normId),
+        name: data.name,
+        account_status: data.account_status ?? 1,
+        currency: data.currency || 'BRL',
+        timezone_name: data.timezone_name || 'America/Sao_Paulo',
+        balance: data.balance !== undefined ? parseFloat(data.balance) / 100 : 0,
+        amount_spent: data.amount_spent !== undefined ? parseFloat(data.amount_spent) / 100 : 0,
+        spend_cap: data.spend_cap !== undefined ? parseFloat(data.spend_cap) / 100 : 0,
+        is_prepay_account: Boolean(data.is_prepay_account),
+        min_daily_budget: data.min_daily_budget !== undefined ? parseFloat(data.min_daily_budget) / 100 : 0
+      };
+    }
+  } catch (err: any) {
+    console.warn(`Falha ao buscar conta act_${cleanId} na Graph API:`, err?.response?.data || err?.message);
+    throw err;
+  }
+
+  return null;
 }
 
 // Date Range Parameter Builder (Enforces exact time_range, NO date_preset parameter allowed!)

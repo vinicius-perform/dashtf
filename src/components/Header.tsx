@@ -7,8 +7,7 @@ import {
   LayoutGrid, 
   RefreshCw,
   CheckCircle2,
-  AlertCircle,
-  Flame
+  AlertCircle
 } from 'lucide-react';
 import { DateRangePicker, DateRange } from './DateRangePicker';
 import { MetaAdAccount, MetaConfig } from '../types/meta';
@@ -93,9 +92,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-3">
             {activeTab === 'gerenciador' && 'Visão Geral'}
-            {activeTab === 'mineracao' && 'Mineração de Concorrentes'}
-            {activeTab === 'leads' && 'CRM Leads'}
-            {activeTab === 'criativos' && 'Performance de Criativos'}
+            {activeTab === 'tarefas' && 'Gestão de Tarefas'}
             {activeTab === 'integracoes' && 'Integrações Meta'}
 
             {activeTab === 'gerenciador' && (
@@ -104,23 +101,12 @@ export const Header: React.FC<HeaderProps> = ({
                 Meta Ads API
               </span>
             )}
-
-            {activeTab === 'mineracao' && (
-              <span className="text-xs bg-emerald-950/90 text-brand-neon font-bold px-3 py-1 rounded-full border border-brand-neon/30 flex items-center gap-1.5 shadow-sm">
-                <Flame className="w-3.5 h-3.5 text-brand-neon fill-brand-neon/20" />
-                Inteligência de Mercado
-              </span>
-            )}
           </h1>
           <p className="text-xs text-brand-textMuted mt-0.5">
-            {activeTab === 'mineracao'
+            {activeTab === 'gerenciador'
               ? `Acompanhe suas métricas principais em um só lugar • Última atualização: ${displayTimestamp}`
-              : activeTab === 'gerenciador'
-              ? `Acompanhe suas métricas principais em um só lugar • Última atualização: ${displayTimestamp}`
-              : activeTab === 'leads'
-              ? 'Gestão e qualificação de leads integrados com CRM'
-              : activeTab === 'criativos'
-              ? 'Performance de Criativos & Lucratividade'
+              : activeTab === 'tarefas'
+              ? 'Cronograma de check-ins da semana e encaminhamentos operacionais da equipe'
               : 'Conecte sua conta de anúncios do Facebook Ads e sincronize dados reais da sua operação'}
           </p>
         </div>
@@ -185,7 +171,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Filter Control Bar */}
-      {(activeTab === 'gerenciador' || activeTab === 'mineracao') && (
+      {activeTab === 'gerenciador' && (
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <div className="flex flex-wrap items-center gap-2">
             {/* Interactive Date Range Picker */}

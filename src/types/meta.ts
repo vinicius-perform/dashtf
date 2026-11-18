@@ -7,6 +7,37 @@ export interface MetaAdAccount {
   timezone_name: string;
   business_id?: string;
   business_name?: string;
+  balance?: number | string;
+  amount_spent?: number | string;
+  spend_cap?: number | string;
+  is_prepay_account?: boolean;
+  min_daily_budget?: number;
+}
+
+export interface MetaAccountCarteiraItem {
+  id: string;
+  raw_id: string;
+  name: string;
+  account_status: number;
+  currency: string;
+  timezone_name: string;
+  business_id?: string;
+  business_name?: string;
+  is_prepay_account: boolean;
+  balance: number; // Saldo em Reais
+  amount_spent: number;
+  spend_cap?: number;
+  daily_budget: number; // R$/dia de campanhas ativas ou ritmo médio
+  spend: number; // Gasto no período
+  conversas: number; // Conversas por mensagem
+  profile_visits: number; // Visitas ao perfil
+  resultsType: 'conversas' | 'visitas' | 'nenhum';
+  resultsCount: number;
+  cpl: number | null; // Custo por resultado (CPL atual)
+  meta_cpl: number | null; // Meta de CPL salva no Supabase
+  remaining_days: number | null; // Saldo / Ritmo diário
+  status_meta_percent: number | null; // ((cpl - meta_cpl) / meta_cpl) * 100
+  excesso_pago: number | null; // Excedente total pago além da meta
 }
 
 export interface FilterTag {
