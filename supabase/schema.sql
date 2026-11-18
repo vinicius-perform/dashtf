@@ -102,13 +102,7 @@ DO $$ BEGIN
     END IF;
 END $$;
 
--- INJEÇÃO DO TOKEN ADMINISTRATIVO (SEED)
-INSERT INTO public.user_integrations (user_id, meta_access_token)
-SELECT id, 'EAAUCHCxqlm4BSXktFRiKzq7w1aa9ZC8iZApYGfhQNAdvWAdI48pJ7NWdN9xHHb9C38XuKd6qZBEN74fjlZBqRJE3vd7VPGtUXSMAAoLfVaT3R6DiehWmRuZCRcjefmDslZBfWOZB9uuMrHxWHqe99dMWsIn1zRVOLlAx8mJ6B2YUfoSsCfNL85EpZBZBMLWZBqrwZDZD'
-FROM auth.users 
-WHERE email = 'viniciusmarinhods@gmail.com'
-ON CONFLICT (user_id) 
-DO UPDATE SET meta_access_token = EXCLUDED.meta_access_token, updated_at = NOW();
+-- O token da Meta NÃO fica mais no banco nem no código: ele é o segredo META_ACCESS_TOKEN das Edge Functions.
 
 
 -- TABELA 5: INTEGRAÇÃO CRM (PLANILHA DE LEADS)

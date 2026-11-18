@@ -32,7 +32,7 @@ export interface MetaAccountCarteiraItem {
   conversas: number; // Conversas por mensagem
   profile_visits: number; // Visitas ao perfil
   leads?: number; // Leads gerados
-  resultsType: 'leads' | 'conversas' | 'visitas' | 'nenhum';
+  resultsType: 'leads' | 'conversas' | 'visitas' | 'outros' | 'nenhum';
   resultsCount: number;
   cpl: number | null; // Custo por resultado (CPL atual)
   meta_cpl: number | null; // Meta de CPL salva no Supabase
@@ -42,6 +42,8 @@ export interface MetaAccountCarteiraItem {
   total_abastecido_liquido?: number; // Total abastecido líquido pago (descontado imposto)
   total_abastecido_bruto?: number; // Total abastecido bruto pago
   imposto_abastecido?: number; // Total de imposto retido nas recargas pagas
+  data_error?: string; // Erro ao consultar a Meta para esta conta
+  fetched_at?: string; // Momento em que os dados foram buscados na Meta
 }
 
 export interface FilterTag {
@@ -105,6 +107,7 @@ export interface MetaCampaign {
   cpc: number | null;
   conversions: number | null;
   resultLabel: string | null;
+  resultCategory?: 'leads' | 'conversas' | 'visitas' | 'outros' | null; // Tipo do resultado oficial da Meta
   cpa: number | null;
   roas: number | null;
   reach: number | null;
@@ -139,6 +142,7 @@ export interface MetaAdSet {
   cpc: number | null;
   conversions: number | null;
   resultLabel: string | null;
+  resultCategory?: 'leads' | 'conversas' | 'visitas' | 'outros' | null; // Tipo do resultado oficial da Meta
   cpa: number | null;
   roas: number | null;
   reach: number | null;
@@ -178,6 +182,7 @@ export interface MetaAd {
   frequency: number | null;
   conversions: number | null;
   resultLabel: string | null;
+  resultCategory?: 'leads' | 'conversas' | 'visitas' | 'outros' | null; // Tipo do resultado oficial da Meta
   cpa: number | null;
   profileVisits: number | null;
   retentionPct: number | null;

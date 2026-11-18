@@ -189,11 +189,8 @@ export const AdSetLevelTable: React.FC<AdSetLevelTableProps> = React.memo(({
                   linkClicks = parseInt(as.clicks as any, 10);
                 }
 
-                if (!lpViews && linkClicks > 0) {
-                  lpViews = Math.round(linkClicks * 0.8511);
-                }
 
-                const connectRate = linkClicks > 0 ? (lpViews / linkClicks) * 100 : 0;
+                const connectRate = linkClicks > 0 && lpViews > 0 ? (lpViews / linkClicks) * 100 : null;
 
                 const costPerLead = as.cpa !== null && as.cpa !== undefined
                   ? as.cpa
@@ -264,7 +261,7 @@ export const AdSetLevelTable: React.FC<AdSetLevelTableProps> = React.memo(({
                     {/* Coluna 7: Connect Rate */}
                     <td className="py-3.5 px-4 text-right">
                       {linkClicks > 0 ? (
-                        <span className={connectRate >= 70 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+                        <span className={connectRate === null ? 'text-zinc-500' : connectRate >= 70 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
                           {formatPercent(connectRate)}
                         </span>
                       ) : (

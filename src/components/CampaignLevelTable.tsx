@@ -234,13 +234,9 @@ export const CampaignLevelTable: React.FC<CampaignLevelTableProps> = React.memo(
                   linkClicks = parseInt(c.clicks as any, 10);
                 }
 
-                // Fallback seguro se não houver landing_page_view nas actions para exibir taxa condicional
-                if (!lpViews && linkClicks > 0) {
-                  lpViews = Math.round(linkClicks * 0.8511);
-                }
 
                 // 3. Calcula o Connect Rate
-                const connectRate = linkClicks > 0 ? (lpViews / linkClicks) * 100 : 0;
+                const connectRate = linkClicks > 0 && lpViews > 0 ? (lpViews / linkClicks) * 100 : null;
 
                 // Cálculo individual de Custo / Lead por linha
                 const costPerLead = c.cpa !== null && c.cpa !== undefined
@@ -306,7 +302,7 @@ export const CampaignLevelTable: React.FC<CampaignLevelTableProps> = React.memo(
                     {/* Coluna 7: Connect Rate (com regra de cor: >= 70% verde, < 70% vermelho) */}
                     <td className="py-3.5 px-4 text-right">
                       {linkClicks > 0 ? (
-                        <span className={connectRate >= 70 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+                        <span className={connectRate === null ? 'text-zinc-500' : connectRate >= 70 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
                           {formatPercent(connectRate)}
                         </span>
                       ) : (

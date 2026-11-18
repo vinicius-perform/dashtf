@@ -1,5 +1,16 @@
-import axios from 'axios';
+import { graphGet } from '../lib/metaGraph';
 import { getActionValue } from '../utils/formatters';
+import { getTodayRange } from '../utils/timezone';
+import {
+  readNativeResults,
+  readNativeCost,
+  classifyActionType,
+  classifyOptimizationGoal,
+  candidateActionTypes,
+  pickActionCount,
+  resultLabelFor,
+  type ResultCategory
+} from '../../supabase/functions/_shared/metaResults';
 import { 
   MetaConfig, 
   MetaAdAccount, 
@@ -11,9 +22,9 @@ import {
   DeliveryStatusInfo
 } from '../types/meta';
 
-export const ADMIN_META_TOKEN = 'EAAUCHCxqlm4BSXktFRiKzq7w1aa9ZC8iZApYGfhQNAdvWAdI48pJ7NWdN9xHHb9C38XuKd6qZBEN74fjlZBqRJE3vd7VPGtUXSMAAoLfVaT3R6DiehWmRuZCRcjefmDslZBfWOZB9uuMrHxWHqe99dMWsIn1zRVOLlAx8mJ6B2YUfoSsCfNL85EpZBZBMLWZBqrwZDZD';
-export const GRAPH_API_BASE = 'https://graph.facebook.com/v19.0';
-export const DEFAULT_API_VERSION = 'v19.0';
+// A versão efetiva é definida no servidor (segredo META_API_VERSION da Edge Function meta-proxy).
+export const DEFAULT_API_VERSION = 'v23.0';
+export const GRAPH_API_BASE = `https://graph.facebook.com/${DEFAULT_API_VERSION}`;
 
 // ID Normalization Helpers
 export function normalizeAccountId(id: string): string {
@@ -96,11 +107,10 @@ export function saveMetaConfig(config: MetaConfig): void {
 }
 
 // On-Demand Discovery: Fetch Business Managers
-export async function fetchBusinessManagers(token: string): Promise<Array<{ id: string; name: string }>> {
-  if (!token || token.trim().length < 10) return [];
+// O token é aplicado no servidor (Edge Function meta-proxy); o parâmetro é mantido só por compatibilidade.
+export async function fetchBusinessManagers(_token?: string): Promise<Array<{ id: string; name: string }>> {
   try {
     const list = await fetchAllPages(`${GRAPH_API_BASE}/me/businesses`, {
-      access_token: token.trim(),
       fields: 'id,name',
       limit: 100
     });
@@ -112,16 +122,14 @@ export async function fetchBusinessManagers(token: string): Promise<Array<{ id: 
 }
 
 // On-Demand Discovery: Fetch Ad Accounts for a Specific Selected Business Manager ONLY
-export async function fetchAdAccountsForBM(token: string, bmId: string): Promise<MetaAdAccount[]> {
-  if (!token || token.trim().length < 10 || !bmId) return [];
-  const cleanToken = token.trim();
+export async function fetchAdAccountsForBM(_token: string | undefined, bmId: string): Promise<MetaAdAccount[]> {
+  if (!bmId) return [];
   const accountMap = new Map<string, MetaAdAccount>();
 
   try {
     // 1. Owned Accounts for BM
     try {
       const owned = await fetchAllPages(`${GRAPH_API_BASE}/${bmId}/owned_ad_accounts`, {
-        access_token: cleanToken,
         fields: 'id,name,account_status,currency,timezone_name,balance,amount_spent,spend_cap,is_prepay_account,min_daily_budget',
         limit: 100
       });
@@ -147,7 +155,6 @@ export async function fetchAdAccountsForBM(token: string, bmId: string): Promise
     // 2. Client Accounts for BM
     try {
       const client = await fetchAllPages(`${GRAPH_API_BASE}/${bmId}/client_ad_accounts`, {
-        access_token: cleanToken,
         fields: 'id,name,account_status,currency,timezone_name,balance,amount_spent,spend_cap,is_prepay_account,min_daily_budget',
         limit: 100
       });
@@ -185,7 +192,7 @@ async function fetchAllPages(url: string, initialParams: Record<string, any>): P
   let nextUrl: string | null = null;
 
   try {
-    const res = await axios.get(url, { params: initialParams, timeout: 10000 });
+    const res = await graphGet(url, { params: initialParams, timeout: 10000 });
     if (res.data && Array.isArray(res.data.data)) {
       allData = [...res.data.data];
     }
@@ -198,7 +205,7 @@ async function fetchAllPages(url: string, initialParams: Record<string, any>): P
     while (nextUrl && safetyCounter < 10) {
       safetyCounter++;
       try {
-        const pageRes = await axios.get(nextUrl, { timeout: 10000 });
+        const pageRes = await graphGet(nextUrl, { timeout: 10000 });
         if (pageRes.data && Array.isArray(pageRes.data.data)) {
           allData = [...allData, ...pageRes.data.data];
         }
@@ -216,18 +223,12 @@ async function fetchAllPages(url: string, initialParams: Record<string, any>): P
 }
 
 // Strict Ingestion & Normalization for Ad Accounts
-export async function fetchAdAccounts(token: string): Promise<MetaAdAccount[]> {
-  if (!token || token.trim().length < 10) {
-    return [];
-  }
-
+export async function fetchAdAccounts(_token?: string): Promise<MetaAdAccount[]> {
   const accountMap = new Map<string, MetaAdAccount>();
-  const cleanToken = token.trim();
 
   try {
     // 1. Fetch direct user ad accounts
     const directAccounts = await fetchAllPages(`${GRAPH_API_BASE}/me/adaccounts`, {
-      access_token: cleanToken,
       fields: 'id,name,account_status,currency,timezone_name,business,balance,amount_spent,spend_cap,is_prepay_account,min_daily_budget',
       limit: 100
     });
@@ -254,7 +255,6 @@ export async function fetchAdAccounts(token: string): Promise<MetaAdAccount[]> {
     // 2. Fetch Business Portfolios
     try {
       const businesses = await fetchAllPages(`${GRAPH_API_BASE}/me/businesses`, {
-        access_token: cleanToken,
         fields: 'id,name',
         limit: 25
       });
@@ -263,7 +263,6 @@ export async function fetchAdAccounts(token: string): Promise<MetaAdAccount[]> {
         // Fetch owned ad accounts
         try {
           const owned = await fetchAllPages(`${GRAPH_API_BASE}/${biz.id}/owned_ad_accounts`, {
-            access_token: cleanToken,
             fields: 'id,name,account_status,currency,timezone_name,balance,amount_spent,spend_cap,is_prepay_account,min_daily_budget',
             limit: 100
           });
@@ -292,7 +291,6 @@ export async function fetchAdAccounts(token: string): Promise<MetaAdAccount[]> {
         // Fetch client ad accounts
         try {
           const client = await fetchAllPages(`${GRAPH_API_BASE}/${biz.id}/client_ad_accounts`, {
-            access_token: cleanToken,
             fields: 'id,name,account_status,currency,timezone_name,balance,amount_spent,spend_cap,is_prepay_account,min_daily_budget',
             limit: 100
           });
@@ -329,15 +327,13 @@ export async function fetchAdAccounts(token: string): Promise<MetaAdAccount[]> {
 /**
  * Busca os dados de uma única conta de anúncios diretamente via GET /v19.0/act_{ID}
  */
-export async function fetchSingleAdAccount(token: string, rawAccountId: string): Promise<MetaAdAccount | null> {
+export async function fetchSingleAdAccount(_token: string | undefined, rawAccountId: string): Promise<MetaAdAccount | null> {
   const cleanId = rawAccountId.replace(/^act_/i, '').replace(/\D/g, '').trim();
   if (!cleanId) return null;
 
-  const cleanToken = token?.trim() || ADMIN_META_TOKEN;
   try {
-    const res = await axios.get(`${GRAPH_API_BASE}/act_${cleanId}`, {
+    const res = await graphGet(`${GRAPH_API_BASE}/act_${cleanId}`, {
       params: {
-        access_token: cleanToken,
         fields: 'id,name,account_id,account_status,currency,timezone_name,balance,amount_spent,spend_cap,is_prepay_account,min_daily_budget'
       },
       timeout: 10000
@@ -376,13 +372,16 @@ export function buildDateParams(dateRange?: any): Record<string, string> {
   let until = dateRange?.endDate;
 
   if (!since || !until) {
-    const todayStr = new Date().toISOString().split('T')[0];
+    // "Hoje" no fuso da conta (antes usava UTC, que após 21h em Brasília já era o dia seguinte)
+    const todayStr = getTodayRange(dateRange?.timezone || 'America/Sao_Paulo').startDate;
     since = todayStr;
     until = todayStr;
   }
 
   // Strictly enforce explicit time_range parameter
   params.time_range = JSON.stringify({ since, until });
+  // Mesma janela de atribuição configurada nos anúncios (igual ao Gerenciador)
+  params.use_unified_attribution_setting = 'true';
   return params;
 }
 
@@ -500,8 +499,29 @@ export function extractNormalizedMetrics(rawItem: any) {
   let conversions: number | null = null;
   let resultLabel: string = 'Leads';
   let cpa: number | null = null;
+  let resultCategory: ResultCategory | null = null;
 
-  if (nameStr.includes('[LEAD D]')) {
+  // 1º: "Resultados" oficiais da Meta (mesmo campo do Gerenciador de Anúncios)
+  const native = readNativeResults(insight.results);
+  const optimizationGoal: string | undefined = insight.optimization_goal || rawItem.optimization_goal;
+  const goalCandidates = candidateActionTypes(optimizationGoal, rawItem.promoted_object);
+
+  if (native && native.indicator) {
+    const cat = classifyActionType(native.indicator);
+    resultCategory = cat === 'outros' ? classifyOptimizationGoal(optimizationGoal, rawItem.promoted_object) : cat;
+    primaryActionType = native.indicator;
+    conversions = native.count > 0 ? native.count : null;
+    resultLabel = resultLabelFor(native.indicator, resultCategory);
+    cpa = conversions ? (readNativeCost(insight.cost_per_result, native.indicator) ?? (spend ? parseFloat((spend / conversions).toFixed(2)) : null)) : null;
+  } else if (goalCandidates.length > 0) {
+    // 2º: meta de desempenho do conjunto (um único tipo de ação, sem somar)
+    const picked = pickActionCount(actions, goalCandidates);
+    const goalCat = classifyOptimizationGoal(optimizationGoal, rawItem.promoted_object);
+    resultCategory = goalCat !== 'outros' ? goalCat : classifyActionType(picked.indicator);
+    primaryActionType = picked.indicator;
+    conversions = picked.count > 0 ? picked.count : null;
+    resultLabel = resultLabelFor(picked.indicator, resultCategory);
+  } else if (nameStr.includes('[LEAD D]')) {
     resultLabel = 'Lead D';
     const leadRes = extractLeadsFromActions(actions);
     conversions = leadRes.count > 0 ? leadRes.count : null;
@@ -553,8 +573,14 @@ export function extractNormalizedMetrics(rawItem: any) {
     primaryActionType = leadRes.actionType || 'lead';
   }
 
+  if (resultCategory === null) {
+    resultCategory = classifyActionType(primaryActionType);
+  }
+
   // Extract CPA strictly from cost_per_action_type array for the isolated primaryActionType
-  if (primaryActionType && conversions !== null && conversions > 0) {
+  if (cpa !== null) {
+    // já veio de cost_per_result
+  } else if (primaryActionType && conversions !== null && conversions > 0) {
     const matchedCost = costPerActionType.find(c => c.action_type === primaryActionType);
     if (matchedCost && matchedCost.value) {
       cpa = parseFloat(parseFloat(matchedCost.value).toFixed(2));
@@ -595,6 +621,7 @@ export function extractNormalizedMetrics(rawItem: any) {
     frequency,
     conversions,
     resultLabel: resultLabel || 'Leads',
+    resultCategory,
     cpa,
     profileVisits,
     retentionPct,
@@ -623,7 +650,7 @@ function getCacheKey(accountId: string, level: string, dateRange?: any): string 
 
 // Fetch Account Level Insights (Direct from Meta API level=account with Cache-First Strategy)
 export async function fetchAccountInsights(config: MetaConfig, dateRange?: any): Promise<any> {
-  if (!config.isConnected || !config.accessToken || !config.selectedAccountId) {
+  if (!config.selectedAccountId) {
     return null;
   }
   const actId = toActAccountId(config.selectedAccountId);
@@ -638,14 +665,13 @@ export async function fetchAccountInsights(config: MetaConfig, dateRange?: any):
   const dateParams = buildDateParams(dateRange);
 
   const params: any = {
-    access_token: config.accessToken.trim(),
-    fields: 'spend,impressions,clicks,ctr,cpc,cpm,actions,cost_per_action_type',
+    fields: 'spend,impressions,clicks,inline_link_clicks,ctr,cpc,cpm,actions,cost_per_action_type,results,cost_per_result',
     level: 'account',
     ...dateParams
   };
 
   try {
-    const res = await axios.get(`${GRAPH_API_BASE}/${actId}/insights`, { params, timeout: 10000 });
+    const res = await graphGet(`${GRAPH_API_BASE}/${actId}/insights`, { params, timeout: 10000 });
     const data = res.data?.data?.[0] || null;
     if (data) {
       metaInsightsCache.set(cacheKey, { data, timestamp: Date.now() });
@@ -796,7 +822,7 @@ const masterAdsStore = new Map<string, any[]>();
 
 // Fetch Live Campaigns with Master List + Left Join Metrics Consolidation
 export async function fetchCampaigns(config: MetaConfig, dateRange?: any): Promise<MetaCampaign[]> {
-  if (!config.isConnected || !config.accessToken || !config.selectedAccountId) {
+  if (!config.selectedAccountId) {
     return [];
   }
 
@@ -811,7 +837,6 @@ export async function fetchCampaigns(config: MetaConfig, dateRange?: any): Promi
     let rawCampaigns: any[] = [];
     try {
       rawCampaigns = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/campaigns`, {
-        access_token: config.accessToken.trim(),
         fields: 'id,name,status,effective_status,configured_status,objective,daily_budget,lifetime_budget,start_time,end_time,issues_info,created_time',
         limit: 500
       });
@@ -831,9 +856,8 @@ export async function fetchCampaigns(config: MetaConfig, dateRange?: any): Promi
     const campaignInsightsMap = new Map<string, any>();
     try {
       const insightsList = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/insights`, {
-        access_token: config.accessToken.trim(),
         level: 'campaign',
-        fields: 'campaign_id,spend,impressions,inline_link_clicks,inline_link_click_ctr,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,video_thruplay_watched_actions,video_p50_watched_actions',
+        fields: 'campaign_id,spend,impressions,inline_link_clicks,inline_link_click_ctr,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,results,cost_per_result,video_thruplay_watched_actions,video_p50_watched_actions',
         limit: 500,
         ...dateParams
       });
@@ -890,6 +914,7 @@ export async function fetchCampaigns(config: MetaConfig, dateRange?: any): Promi
           cpc: parsed.cpc,
           conversions: parsed.conversions,
           resultLabel: parsed.resultLabel,
+          resultCategory: parsed.resultCategory,
           cpa: parsed.cpa,
           roas: parsed.roas,
           reach: parsed.reach,
@@ -981,7 +1006,7 @@ export async function fetchCampaigns(config: MetaConfig, dateRange?: any): Promi
 
 // Fetch Live AdSets with Master List + Left Join Consolidation
 export async function fetchAdSets(config: MetaConfig, campaigns?: MetaCampaign[], dateRange?: any): Promise<MetaAdSet[]> {
-  if (!config.isConnected || !config.accessToken || !config.selectedAccountId) {
+  if (!config.selectedAccountId) {
     return [];
   }
 
@@ -996,7 +1021,6 @@ export async function fetchAdSets(config: MetaConfig, campaigns?: MetaCampaign[]
     let rawAdSets: any[] = [];
     try {
       rawAdSets = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/adsets`, {
-        access_token: config.accessToken.trim(),
         fields: 'id,name,status,effective_status,configured_status,campaign_id,campaign{name},daily_budget,lifetime_budget,targeting,start_time,end_time,issues_info',
         limit: 500
       });
@@ -1016,9 +1040,8 @@ export async function fetchAdSets(config: MetaConfig, campaigns?: MetaCampaign[]
     const adsetInsightsMap = new Map<string, any>();
     try {
       const insightsList = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/insights`, {
-        access_token: config.accessToken.trim(),
         level: 'adset',
-        fields: 'adset_id,spend,impressions,inline_link_clicks,inline_link_click_ctr,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,video_thruplay_watched_actions,video_p50_watched_actions',
+        fields: 'adset_id,optimization_goal,spend,impressions,inline_link_clicks,inline_link_click_ctr,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,results,cost_per_result,video_thruplay_watched_actions,video_p50_watched_actions',
         limit: 500,
         ...dateParams
       });
@@ -1085,6 +1108,7 @@ export async function fetchAdSets(config: MetaConfig, campaigns?: MetaCampaign[]
           cpc: parsed.cpc,
           conversions: parsed.conversions,
           resultLabel: parsed.resultLabel,
+          resultCategory: parsed.resultCategory,
           cpa: parsed.cpa,
           roas: parsed.roas,
           reach: parsed.reach,
@@ -1177,7 +1201,7 @@ export async function fetchAdSets(config: MetaConfig, campaigns?: MetaCampaign[]
 
 // Fetch Live Ads with Master List + Left Join Consolidation
 export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRange?: any): Promise<MetaAd[]> {
-  if (!config.isConnected || !config.accessToken || !config.selectedAccountId) {
+  if (!config.selectedAccountId) {
     return [];
   }
 
@@ -1192,7 +1216,6 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
     let rawAds: any[] = [];
     try {
       rawAds = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/ads`, {
-        access_token: config.accessToken.trim(),
         fields: 'id,name,status,effective_status,configured_status,adset_id,campaign_id,creative',
         limit: 500
       });
@@ -1204,7 +1227,6 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
       console.warn('⚠️ Primary ads endpoint query failed, retrying basic fields:', e);
       try {
         rawAds = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/ads`, {
-          access_token: config.accessToken.trim(),
           fields: 'id,name,status,effective_status,adset_id,campaign_id',
           limit: 500
         });
@@ -1226,9 +1248,8 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
     const adInsightsMap = new Map<string, any>();
     try {
       const insightsList = await fetchAllPages(`${GRAPH_API_BASE}/${actId}/insights`, {
-        access_token: config.accessToken.trim(),
         level: 'ad',
-        fields: 'ad_id,spend,impressions,inline_link_clicks,inline_link_click_ctr,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,video_thruplay_watched_actions,video_p50_watched_actions',
+        fields: 'ad_id,optimization_goal,spend,impressions,inline_link_clicks,inline_link_click_ctr,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,results,cost_per_result,video_thruplay_watched_actions,video_p50_watched_actions',
         limit: 500,
         ...dateParams
       });
@@ -1306,6 +1327,7 @@ export async function fetchAds(config: MetaConfig, adsets?: MetaAdSet[], dateRan
           frequency: parsed.frequency,
           conversions: parsed.conversions,
           resultLabel: parsed.resultLabel,
+          resultCategory: parsed.resultCategory,
           cpa: parsed.cpa,
           profileVisits: parsed.profileVisits,
           retentionPct: parsed.retentionPct,
@@ -1459,10 +1481,6 @@ export function computeSummaryMetrics(campaigns: MetaCampaign[]): GerenciadorSum
       linkClicks = parseInt(c.clicks as any, 10);
     }
 
-    if (!lpViews && linkClicks > 0) {
-      lpViews = Math.round(linkClicks * 0.8511);
-    }
-
     if (linkClicks > 0) {
       totalClicks += linkClicks;
       hasClicks = true;
@@ -1479,7 +1497,7 @@ export function computeSummaryMetrics(campaigns: MetaCampaign[]): GerenciadorSum
 
   const cpmMedio = hasImpressions && totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : null;
   const ctrMedio = hasImpressions && totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : null;
-  const connectRate = hasClicks && totalClicks > 0 ? (totalLandingPageViews / totalClicks) * 100 : 0;
+  const connectRate = hasClicks && hasLandingPageViews && totalClicks > 0 ? (totalLandingPageViews / totalClicks) * 100 : null;
   const cpcMedio = hasClicks && totalClicks > 0 ? totalSpend / totalClicks : null;
   const cpaMedio = hasConversions && totalConversions > 0 ? totalSpend / totalConversions : null;
 
@@ -1487,7 +1505,7 @@ export function computeSummaryMetrics(campaigns: MetaCampaign[]): GerenciadorSum
     investimentoTotal: hasSpend ? totalSpend : null,
     cpmMedio: cpmMedio !== null ? parseFloat(cpmMedio.toFixed(2)) : null,
     ctrMedio: ctrMedio !== null ? parseFloat(ctrMedio.toFixed(2)) : null,
-    connectRate: connectRate !== null ? parseFloat(connectRate.toFixed(2)) : 0,
+    connectRate: connectRate !== null ? parseFloat(connectRate.toFixed(2)) : null,
     impressioesTotal: hasImpressions ? totalImpressions : null,
     cliquesTotal: hasClicks ? totalClicks : null,
     landingPageViewsTotal: hasLandingPageViews ? totalLandingPageViews : null,
@@ -1677,16 +1695,11 @@ export function generateDynamicAdsForPage(pageName: string, pageId: string) {
 
 export async function searchCompetitorAds(
   pageUrl: string, 
-  accessToken: string
+  _accessToken?: string
 ): Promise<CompetitorMiningResult> {
   const pageId = extractPageIdFromUrl(pageUrl);
   if (!pageId) {
     throw new Error('ID da página não encontrado na URL fornecida.');
-  }
-
-  const token = accessToken || ADMIN_META_TOKEN;
-  if (!token) {
-    throw new Error('Token de acesso da Meta não configurado.');
   }
 
   let pageName = '';
@@ -1695,10 +1708,9 @@ export async function searchCompetitorAds(
 
   // 1. Tenta obter o nome real da página via Graph API
   try {
-    const pageRes = await axios.get(`${GRAPH_API_BASE}/${pageId}`, {
+    const pageRes = await graphGet(`${GRAPH_API_BASE}/${pageId}`, {
       params: {
         fields: 'id,name,category,about,picture.type(large)',
-        access_token: token
       },
       timeout: 8000
     });
@@ -1718,11 +1730,10 @@ export async function searchCompetitorAds(
     ad_reached_countries: "['BR']",
     ad_active_status: 'ALL',
     fields: 'id,ad_creation_time,ad_creative_bodies,ad_creative_link_captions,ad_creative_link_titles,page_id,page_name,ad_delivery_start_time,publisher_platforms,bylines,languages',
-    access_token: token
   };
 
   try {
-    const response = await axios.get(url, { params, timeout: 15000 });
+    const response = await graphGet(url, { params, timeout: 15000 });
     const rawData = response.data?.data || [];
     
     if (!pageName && rawData[0]?.page_name) {

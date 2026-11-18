@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { graphGet } from '../../lib/metaGraph';
 import { MetaConfig, MetaCampaign, MetaAdSet, MetaAd, DeliveryStatusInfo } from '../../types/meta';
 import { normalizeAccountId, toActAccountId, resolveDeliveryStatus, extractNormalizedMetrics } from '../metaDataEngine';
 import { supabase } from '../../lib/supabase';
@@ -30,7 +30,7 @@ export interface DailyInsightRecord {
 }
 
 const DAILY_STORAGE_KEY = 'fazendo_acontecer_daily_insights_db';
-const GRAPH_API_BASE = 'https://graph.facebook.com/v19.0';
+const GRAPH_API_BASE = 'https://graph.facebook.com/v23.0'; // versão efetiva definida no servidor (meta-proxy)
 
 // 1. Persistent Storage Methods (60-day Retained Daily Snapshots DB)
 export function getStoredDailyInsights(): Map<string, DailyInsightRecord> {
@@ -129,7 +129,7 @@ export function generateDateRangeList(startDateStr: string, endDateStr: string):
 
 // 4. Attribution Window Cascade Sync (Syncs last 7 days daily breakdowns)
 export async function sync7DaysAttributionWindow(config: MetaConfig): Promise<number> {
-  if (!config.isConnected || !config.accessToken || !config.selectedAccountId) {
+  if (!config.selectedAccountId) {
     return 0;
   }
   const actId = toActAccountId(config.selectedAccountId);
@@ -147,15 +147,15 @@ export async function sync7DaysAttributionWindow(config: MetaConfig): Promise<nu
 
   try {
     const params = {
-      access_token: config.accessToken.trim(),
       level: 'campaign',
       fields: 'campaign_id,campaign_name,spend,impressions,inline_link_clicks,inline_link_click_ctr,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type',
       time_range: JSON.stringify({ since, until }),
       time_increment: 1, // Daily breakdown from Meta Graph API
+      use_unified_attribution_setting: 'true',
       limit: 500
     };
 
-    const res = await axios.get(`${GRAPH_API_BASE}/${actId}/insights`, { params, timeout: 15000 });
+    const res = await graphGet(`${GRAPH_API_BASE}/${actId}/insights`, { params, timeout: 15000 });
     const rawList = res.data?.data || [];
 
     let count = 0;
@@ -212,7 +212,7 @@ export async function fetchHybridCampaigns(
   dateRange: { startDate: string; endDate: string; label?: string },
   rawMetaFetchFn: (config: MetaConfig, dateRange: any) => Promise<MetaCampaign[]>
 ): Promise<MetaCampaign[]> {
-  if (!config.isConnected || !config.accessToken || !config.selectedAccountId) {
+  if (!config.selectedAccountId) {
     return [];
   }
 
@@ -320,7 +320,7 @@ export async function runInitialBackfillScript(
   startDate = '2026-07-01',
   endDate = '2026-08-18'
 ): Promise<{ success: boolean; totalRecords: number; message: string }> {
-  if (!config.isConnected || !config.accessToken || !config.selectedAccountId) {
+  if (!config.selectedAccountId) {
     return { success: false, totalRecords: 0, message: 'Configuração do Meta Ads ausente ou desconectada.' };
   }
 
@@ -332,18 +332,18 @@ export async function runInitialBackfillScript(
 
   try {
     const params = {
-      access_token: config.accessToken.trim(),
       level: 'campaign',
       fields: 'campaign_id,campaign_name,spend,impressions,inline_link_clicks,inline_link_click_ctr,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type',
       time_range: JSON.stringify({ since: startDate, until: endDate }),
       time_increment: 1, // Native Meta daily breakdown (1 record per campaign per day)
+      use_unified_attribution_setting: 'true',
       limit: 500
     };
 
     // Paginated fetch to guarantee 100% of daily rows are downloaded across 60 days
     let rawList: any[] = [];
     try {
-      const res = await axios.get(`${GRAPH_API_BASE}/${actId}/insights`, { params, timeout: 45000 });
+      const res = await graphGet(`${GRAPH_API_BASE}/${actId}/insights`, { params, timeout: 45000 });
       if (res.data && Array.isArray(res.data.data)) {
         rawList = res.data.data;
         let nextUrl = res.data.paging?.next;
@@ -351,7 +351,7 @@ export async function runInitialBackfillScript(
         while (nextUrl && safetyCounter < 10) {
           safetyCounter++;
           try {
-            const pageRes = await axios.get(nextUrl, { timeout: 30000 });
+            const pageRes = await graphGet(nextUrl, { timeout: 30000 });
             if (pageRes.data && Array.isArray(pageRes.data.data)) {
               rawList = [...rawList, ...pageRes.data.data];
             }

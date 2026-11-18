@@ -23,12 +23,8 @@ import {
   computeSummaryMetrics, 
   fetchAdAccounts,
   extractLeadsFromActions,
-  ADMIN_META_TOKEN,
   BM_ACCOUNTS_DICTIONARY
 } from './services/metaDataEngine';
-import { 
-  fetchUserMetaToken 
-} from './services/userIntegrationService';
 import { 
   MetaConfig, 
   MetaAdAccount, 
@@ -105,12 +101,11 @@ export function App() {
     }
   }, [managedAccounts, selectedAccountId]);
 
-  // Carrega contas de anúncios em tempo real via Meta Graph API
+  // Carrega contas de anúncios via Edge Function meta-proxy (token fica no servidor)
   useEffect(() => {
-    const token = metaConfig.accessToken?.trim() || ADMIN_META_TOKEN;
-    if (!token) return;
+    if (!session?.user?.id) return;
 
-    fetchAdAccounts(token)
+    fetchAdAccounts()
       .then((fetchedAccs) => {
         if (fetchedAccs && fetchedAccs.length > 0) {
           setAccounts(fetchedAccs);
@@ -119,7 +114,7 @@ export function App() {
       .catch((err) => {
         console.warn('Falha ao sincronizar contas de anúncios:', err);
       });
-  }, [metaConfig.accessToken]);
+  }, [session?.user?.id]);
 
   const selectedAccObj = managedAccounts.find(a => a.id === selectedAccountId);
   const accountTimezone = selectedAccObj?.timezone_name || 'America/Sao_Paulo';
@@ -209,36 +204,12 @@ export function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 1.b Load User Meta Integration Token from Supabase user_integrations table on Session
+  // 1.b O token da Meta fica no servidor (segredo META_ACCESS_TOKEN da Edge Function meta-proxy).
+  // Com sessão ativa, o painel é considerado conectado.
   useEffect(() => {
     if (!session?.user?.id) return;
-
-    let isMounted = true;
-    const userId = session.user.id;
-    const userEmail = session.user.email;
-
-    fetchUserMetaToken(userId, userEmail)
-      .then((dbToken) => {
-        if (!isMounted || !dbToken) return;
-        setMetaConfig((prev) => {
-          if (prev.accessToken === dbToken && prev.isConnected) {
-            return prev; // Preserve identity to avoid downstream re-renders
-          }
-          return {
-            ...prev,
-            accessToken: dbToken,
-            isConnected: true
-          };
-        });
-      })
-      .catch((err) => {
-        console.error('Falha ao sincronizar token da Meta:', err);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [session?.user?.id, session?.user?.email]);
+    setMetaConfig((prev) => (prev.isConnected ? prev : { ...prev, isConnected: true }));
+  }, [session?.user?.id]);
 
   // Trigger 60-day retention purger on app mount
   useEffect(() => {
@@ -288,9 +259,9 @@ export function App() {
         selectedAccountId: selectedAccountId
       };
 
-      // Hybrid Orchestration: 100% DB for past, Live for Today, Combined for Ranges
+      // Sempre dados ao vivo da Meta (o cache local antigo usava a regra de resultados incorreta)
       const [campData, adsetData, accInsights] = await Promise.all([
-        fetchHybridCampaigns(currentConfig, dateRange, fetchCampaigns),
+        fetchCampaigns(currentConfig, dateRange),
         fetchAdSets(currentConfig, undefined, dateRange),
         fetchAccountInsights(currentConfig, dateRange)
       ]);
@@ -332,16 +303,7 @@ export function App() {
           baseSummary.cpcMedio = parseFloat((parseFloat(accInsights.spend) / inlineClicks).toFixed(2));
         }
 
-        // Strict Lead Action Extraction for Account Card
-        if (accInsights.actions) {
-          const accLeads = extractLeadsFromActions(accInsights.actions);
-          baseSummary.leadsTotal = accLeads.count > 0 ? accLeads.count : null;
-          if (accLeads.count > 0 && baseSummary.investimentoTotal) {
-            baseSummary.cpaMedio = parseFloat((baseSummary.investimentoTotal / accLeads.count).toFixed(2));
-          } else {
-            baseSummary.cpaMedio = null;
-          }
-        }
+        // Resultados e custo por resultado vêm das campanhas (resultado oficial por tipo), não só de leads
       }
 
       setSummary(baseSummary);

@@ -1,5 +1,4 @@
 import { supabase } from '../lib/supabase';
-import { ADMIN_META_TOKEN } from './metaDataEngine';
 
 const withTimeout = async <T>(promiseLike: PromiseLike<T>, timeoutMs = 5000): Promise<T> => {
   let timer: any;
@@ -19,7 +18,7 @@ export function maskToken(token: string): string {
   return `${clean.slice(0, 6)}...${clean.slice(-4)}`;
 }
 
-export async function fetchUserMetaToken(userId: string, userEmail?: string): Promise<string | null> {
+export async function fetchUserMetaToken(userId: string, _userEmail?: string): Promise<string | null> {
   if (!userId) return null;
 
   try {
@@ -39,14 +38,6 @@ export async function fetchUserMetaToken(userId: string, userEmail?: string): Pr
     }
   } catch (err: any) {
     console.error('❌ [SUPABASE CLOUD SYNC] Exceção/Timeout ao buscar Meta Token no Supabase:', err?.message || err);
-  }
-
-  // Fallback for administrative accounts
-  if (userEmail === 'viniciusmarinhods@gmail.com' || userEmail === 'antonio.neto@dottech.ai') {
-    console.log('🔑 [SUPABASE CLOUD SYNC] E-mail admin detectado. Aplicando token Meta administrativo.');
-    // Background seed into Supabase user_integrations
-    saveUserMetaToken(userId, ADMIN_META_TOKEN).catch(() => {});
-    return ADMIN_META_TOKEN;
   }
 
   return null;

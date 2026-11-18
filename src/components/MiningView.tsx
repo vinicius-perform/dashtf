@@ -26,7 +26,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { MetaAdsLibraryView, LibraryAd, getInitials } from './MetaAdsLibraryView';
-import { searchCompetitorAds, getSavedMetaConfig, ADMIN_META_TOKEN, generateDynamicAdsForPage } from '../services/metaDataEngine';
+import { searchCompetitorAds, getSavedMetaConfig, generateDynamicAdsForPage } from '../services/metaDataEngine';
 
 export interface MiningViewProps {
   onNavigateToGerenciador?: () => void;
@@ -254,10 +254,7 @@ export const MiningView: React.FC<MiningViewProps> = ({ onNavigateToGerenciador 
     setToast(null);
 
     try {
-      const metaConfig = getSavedMetaConfig();
-      const token = metaConfig.accessToken || ADMIN_META_TOKEN;
-
-      const result = await searchCompetitorAds(searchUrl, token);
+      const result = await searchCompetitorAds(searchUrl);
 
       const competitorName = result.pageName || `Página ${result.pageId}`;
       const initials = getInitials(competitorName);

@@ -22276,7 +22276,7 @@ import {
   DeliveryStatusInfo
 } from '../types/meta';
 
-export const ADMIN_META_TOKEN = 'EAAUCHCxqlm4BSXktFRiKzq7w1aa9ZC8iZApYGfhQNAdvWAdI48pJ7NWdN9xHHb9C38XuKd6qZBEN74fjlZBqRJE3vd7VPGtUXSMAAoLfVaT3R6DiehWmRuZCRcjefmDslZBfWOZB9uuMrHxWHqe99dMWsIn1zRVOLlAx8mJ6B2YUfoSsCfNL85EpZBZBMLWZBqrwZDZD';
+export const ADMIN_META_TOKEN = '<META_ACCESS_TOKEN_REMOVIDO>';
 export const GRAPH_API_BASE = 'https://graph.facebook.com/v19.0';
 export const DEFAULT_API_VERSION = 'v19.0';
 
@@ -27168,7 +27168,7 @@ END $$;
 
 -- INJEÇÃO DO TOKEN ADMINISTRATIVO (SEED)
 INSERT INTO public.user_integrations (user_id, meta_access_token)
-SELECT id, 'EAAUCHCxqlm4BSXktFRiKzq7w1aa9ZC8iZApYGfhQNAdvWAdI48pJ7NWdN9xHHb9C38XuKd6qZBEN74fjlZBqRJE3vd7VPGtUXSMAAoLfVaT3R6DiehWmRuZCRcjefmDslZBfWOZB9uuMrHxWHqe99dMWsIn1zRVOLlAx8mJ6B2YUfoSsCfNL85EpZBZBMLWZBqrwZDZD'
+SELECT id, '<META_ACCESS_TOKEN_REMOVIDO>'
 FROM auth.users 
 WHERE email = 'viniciusmarinhods@gmail.com'
 ON CONFLICT (user_id) 

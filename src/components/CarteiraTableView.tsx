@@ -430,10 +430,12 @@ export const CarteiraTableView: React.FC<CarteiraTableViewProps> = ({
                               {formatNumber(item.resultsCount)}
                             </span>
                             <span className="block text-[11px] text-zinc-400">
-                              {item.resultsType === 'leads' ? 'Leads' : item.resultsType === 'conversas' ? 'Conversas' : 'Visitas'}
+                              {item.resultsType === 'leads' ? 'Leads' : item.resultsType === 'conversas' ? 'Conversas' : item.resultsType === 'visitas' ? 'Visitas' : 'Resultados'}
                             </span>
                           </div>
                         </div>
+                      ) : item.data_error ? (
+                        <span className="text-red-400 text-[11px]" title={item.data_error}>Erro ao consultar a Meta</span>
                       ) : (
                         <span className="text-zinc-500 text-xs">—</span>
                       )}
@@ -447,7 +449,7 @@ export const CarteiraTableView: React.FC<CarteiraTableViewProps> = ({
                             {formatCurrency(item.cpl)}
                           </span>
                           <span className="block text-[10px] text-zinc-400">
-                            {item.resultsType === 'leads' ? 'por lead' : item.resultsType === 'conversas' ? 'por conversa' : 'por visita'}
+                            {item.resultsType === 'leads' ? 'por lead' : item.resultsType === 'conversas' ? 'por conversa' : item.resultsType === 'visitas' ? 'por visita' : 'por resultado'}
                           </span>
                         </div>
                       ) : (

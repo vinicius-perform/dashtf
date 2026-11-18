@@ -1,16 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import axios from 'axios';
+import { graphGet } from '../lib/metaGraph';
 import { MetaConfig, MetaAdAccount } from '../types/meta';
 import { 
   saveMetaConfig, 
   fetchAdAccounts,
-  ADMIN_META_TOKEN,
-  BM_ACCOUNTS_DICTIONARY
+  BM_ACCOUNTS_DICTIONARY,
+  GRAPH_API_BASE
 } from '../services/metaDataEngine';
-import { 
-  saveUserMetaToken, 
-  maskToken 
-} from '../services/userIntegrationService';
 import { 
   fetchAgencyPortfolio, 
   syncAgencyPortfolio, 
@@ -60,8 +56,6 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
   onPortfolioUpdated
 }) => {
   // Token de Acesso da Meta
-  const [tokenInput, setTokenInput] = useState(metaConfig.accessToken || ADMIN_META_TOKEN);
-  const [showToken, setShowToken] = useState(false);
 
   // Carteira de clientes salva no Supabase (agency_portfolio)
   const [savedPortfolio, setSavedPortfolio] = useState<AgencyPortfolioItem[]>([]);
@@ -100,12 +94,8 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Extrai token efetivo desmascarado
-  const getEffectiveToken = useCallback(() => {
-    if (tokenInput.includes('...') && metaConfig.accessToken) {
-      return metaConfig.accessToken;
-    }
-    return tokenInput.trim() || ADMIN_META_TOKEN;
-  }, [tokenInput, metaConfig.accessToken]);
+  // O token é aplicado no servidor (Edge Function meta-proxy)
+  const getEffectiveToken = useCallback(() => 'server-managed', []);
 
   // Carrega contas do Supabase e sincroniza a lista inicial
   useEffect(() => {
@@ -141,7 +131,7 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
     if (!token || token.length < 10) {
       setToastMessage({
         type: 'error',
-        text: 'Insira um Token de Acesso da Meta válido para sincronizar.'
+        text: 'Não foi possível acessar a Meta pelo servidor.'
       });
       return;
     }
@@ -167,14 +157,14 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
       } else {
         setToastMessage({
           type: 'error',
-          text: 'Nenhuma conta foi retornada para este token. Você pode cadastrar contas manualmente abaixo.'
+          text: 'Nenhuma conta foi retornada pelo token do servidor. Você pode cadastrar contas manualmente abaixo.'
         });
       }
     } catch (err: any) {
       console.warn('Erro ao sincronizar contas com a Meta:', err);
       setToastMessage({
         type: 'error',
-        text: 'Não foi possível buscar as contas via Meta Graph API. Verifique o token ou adicione pelo ID.'
+        text: 'Não foi possível buscar as contas via Meta Graph API. Verifique o segredo META_ACCESS_TOKEN e a lista ALLOWED_EMAILS no Supabase, ou adicione pelo ID.'
       });
     } finally {
       setIsLoadingAccounts(false);
@@ -226,11 +216,10 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
 
     try {
       // 1. Tenta validar diretamente na Meta Graph API
-      const url = `https://graph.facebook.com/v19.0/${formattedId}`;
-      const res = await axios.get(url, {
+      const url = `${GRAPH_API_BASE}/${formattedId}`;
+      const res = await graphGet(url, {
         params: {
           fields: 'name,account_status,currency,timezone_name',
-          access_token: token
         },
         timeout: 12000
       });
@@ -397,10 +386,6 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
       }
     });
 
-    const finalToken = getEffectiveToken();
-    if (session?.user?.id) {
-      await saveUserMetaToken(session.user.id, finalToken);
-    }
 
     // Grava no Supabase (agency_portfolio) e no cache local
     await syncAgencyPortfolio(selectedList);
@@ -410,7 +395,7 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
 
     const updatedConfig: MetaConfig = {
       ...metaConfig,
-      accessToken: finalToken,
+      accessToken: '',
       selectedAccountId: primaryAccount?.account_id || metaConfig.selectedAccountId,
       accountName: primaryAccount?.account_name || metaConfig.accountName,
       currency: 'BRL',
@@ -532,7 +517,7 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
             <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
               <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <Lock className="w-4 h-4 text-brand-neon" />
-                <span>Token de Acesso da Meta</span>
+                <span>Conexão com a Meta</span>
               </h3>
 
               <button
@@ -547,28 +532,14 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
               </button>
             </div>
 
-            <div className="space-y-2">
-              <div className="relative">
-                <input
-                  type={showToken ? 'text' : 'password'}
-                  value={showToken ? maskToken(tokenInput) : tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value)}
-                  placeholder="Cole seu token de acesso da Meta (EAAB...)"
-                  className="w-full bg-zinc-900 border border-zinc-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 font-mono outline-none focus:border-brand-neon focus:ring-1 focus:ring-brand-neon transition-all"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowToken(!showToken)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200 transition-colors"
-                  title={showToken ? 'Ocultar' : 'Exibir token'}
-                >
-                  {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+            <div className="space-y-2 text-[11px] text-zinc-400 leading-relaxed">
+              <p>
+                O token fica guardado no servidor (segredo <code className="text-zinc-300">META_ACCESS_TOKEN</code> das
+                Edge Functions do Supabase) e nunca é enviado ao navegador.
+              </p>
+              <div className="flex items-center gap-2 text-zinc-500">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Token salvo com segurança no Supabase</span>
+                <span>Para trocar o token, atualize o segredo no painel do Supabase.</span>
               </div>
             </div>
           </div>

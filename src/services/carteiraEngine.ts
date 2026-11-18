@@ -1,16 +1,15 @@
-import axios from 'axios';
 import { 
   MetaConfig, 
   MetaAdAccount, 
   MetaAccountCarteiraItem 
 } from '../types/meta';
 import { 
-  GRAPH_API_BASE, 
   toActAccountId, 
-  normalizeAccountId, 
-  buildDateParams,
-  ADMIN_META_TOKEN 
+  normalizeAccountId
 } from './metaDataEngine';
+import { supabase } from '../lib/supabase';
+import { getTodayRange } from '../utils/timezone';
+import type { RecargaItem } from '../types/financeiro';
 import { fetchAccountSettingsMap } from './accountSettingsService';
 import { 
   getFinanceiroAccounts, 
@@ -89,376 +88,224 @@ export function getSpendForAccount(acc: { id: string; nome?: string; name?: stri
   return null;
 }
 
-// Consolidação de Métricas da Carteira seguindo a Hierarquia da Agência
-export interface ConsolidatedAccountResults {
-  resultsType: 'leads' | 'conversas' | 'visitas' | 'nenhum';
-  resultsCount: number;
-  cpl: number | null;
-  totalLeads: number;
-  totalConversas: number;
-  totalVisitas: number;
+// ---------------------------------------------------------------------------
+// Carteira de Contas: dados calculados no servidor (Edge Function meta-carteira)
+// com as mesmas regras do Gerenciador de Anúncios. Ver supabase/functions/_shared/metaResults.ts
+// ---------------------------------------------------------------------------
+
+export interface CarteiraServerRow {
+  id: string;
+  error?: string;
+  name?: string;
+  account_status?: number;
+  currency?: string;
+  timezone_name?: string;
+  is_prepay_account?: boolean;
+  balance_meta?: number | null;
+  balance_raw?: number | null;
+  amount_spent?: number;
+  spend_cap?: number;
+  spend?: number;
+  resultsType?: 'leads' | 'conversas' | 'visitas' | 'outros' | 'nenhum';
+  resultsCount?: number;
+  cpl?: number | null;
+  indicator?: string | null;
+  breakdown?: Record<'leads' | 'conversas' | 'visitas' | 'outros', { count: number; spend: number }>;
+  daily_budget?: number;
+  avg_daily_spend?: number;
+  spend_since_prepaid?: number | null;
+  fetched_at?: string;
+  from_cache?: boolean;
 }
 
 /**
- * Iteração Completa: Varre o array actions e soma os valores das três categorias principais simultaneamente:
- * - Total de Conversas: onsite_conversion.total_messaging_connection, onsite_conversion.messaging_conversation_started_7d, onsite_conversion.messaging_first_reply
- * - Total de Visitas: outbound_clicks, outbound_click, link_click, ig_profile_visits, instagram_profile_visit, profile_visit
- * - Total de Leads: lead, onsite_conversion.lead, onsite_web_lead, offsite_conversion.fb_pixel_lead, onsite_conversion.lead_grouped, leadgen_grouped, offsite_conversion.custom.*
+ * Converte a data de uma recarga ("03/11", "03/11/2026" ou "2026-11-03") para YYYY-MM-DD.
+ * Sem ano, assume o ano corrente (ou o anterior, se a data cair no futuro).
  */
-export function extractConsolidatedMetrics(actions: any[] = []): {
-  totalLeads: number;
-  totalConversas: number;
-  totalVisitas: number;
-} {
-  let totalLeads = 0;
-  let totalConversas = 0;
-  let totalVisitas = 0;
+export function parseRecargaDate(raw: string | undefined, todayIso: string): string | null {
+  if (!raw) return null;
+  const v = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+  const m = v.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+  if (!m) return null;
+  const dd = m[1].padStart(2, '0');
+  const mm = m[2].padStart(2, '0');
+  let year = m[3] ? (m[3].length === 2 ? `20${m[3]}` : m[3]) : todayIso.slice(0, 4);
+  let iso = `${year}-${mm}-${dd}`;
+  if (!m[3] && iso > todayIso) {
+    year = String(Number(year) - 1);
+    iso = `${year}-${mm}-${dd}`;
+  }
+  return iso;
+}
 
-  if (Array.isArray(actions)) {
-    for (const a of actions) {
-      if (!a || !a.action_type) continue;
-      const type = String(a.action_type).trim();
-      const val = parseInt(a.value, 10) || 0;
-      if (val <= 0) continue;
+/** Data da recarga paga mais antiga (marco a partir do qual o gasto é descontado do saldo). */
+export function earliestPaidRecarga(recargas: RecargaItem[] = [], todayIso: string): string | null {
+  const dates = recargas
+    .filter((r) => r.status === 'Pago')
+    .map((r) => parseRecargaDate(r.pagoEm || r.data, todayIso))
+    .filter((d): d is string => Boolean(d))
+    .sort();
+  return dates[0] || null;
+}
 
-      // 1. Total de Leads: Somar lead, onsite_web_lead, offsite_conversion.fb_pixel_lead e onsite_conversion.lead_grouped
-      if (
-        type === 'lead' ||
-        type === 'onsite_conversion.lead' ||
-        type === 'onsite_web_lead' ||
-        type === 'offsite_conversion.fb_pixel_lead' ||
-        type === 'onsite_conversion.lead_grouped' ||
-        type === 'leadgen_grouped' ||
-        type.startsWith('offsite_conversion.custom.')
-      ) {
-        totalLeads += val;
-      }
-
-      // 2. Total de Conversas: Somar os valores de onsite_conversion.total_messaging_connection, onsite_conversion.messaging_conversation_started_7d e onsite_conversion.messaging_first_reply
-      if (
-        type === 'onsite_conversion.total_messaging_connection' ||
-        type === 'onsite_conversion.messaging_conversation_started_7d' ||
-        type === 'onsite_conversion.messaging_first_reply'
-      ) {
-        totalConversas += val;
-      }
-
-      // 3. Total de Visitas: Somar os valores de outbound_clicks, link_click (quando o destino for o perfil do Instagram) ou ig_profile_visits
-      if (
-        type === 'outbound_clicks' ||
-        type === 'outbound_click' ||
-        type === 'link_click' ||
-        type === 'ig_profile_visits' ||
-        type === 'instagram_profile_visit' ||
-        type === 'profile_visit'
-      ) {
-        totalVisitas += val;
+async function invokeCarteira(body: Record<string, unknown>): Promise<CarteiraServerRow[]> {
+  const { data, error } = await supabase.functions.invoke('meta-carteira', { body });
+  if (error) {
+    let message = error.message;
+    const ctx: any = (error as any).context;
+    if (ctx && typeof ctx.json === 'function') {
+      try {
+        const payload = await ctx.json();
+        message = payload?.error?.message || payload?.error || message;
+      } catch {
+        /* sem corpo */
       }
     }
+    throw new Error(`Falha ao buscar dados da Meta: ${message}`);
   }
-
-  return { totalLeads, totalConversas, totalVisitas };
+  return Array.isArray(data?.accounts) ? data.accounts : [];
 }
 
 /**
- * Hierarquia de Exibição (O que mostrar na Tabela):
- * Após somar as três categorias simultaneamente, decide qual exibir com base na regra de negócio da agência:
- * - Se Conversas for a métrica dominante do volume da conta (ex: centenas/milhares de conversas vs leads residuais) -> exibe Conversas.
- * - Regra 1: Se houver Total de Leads > 0 -> exibe o total de Leads (Ícone de Alvo). Calcule o CPL dividindo o Gasto Total por este número.
- * - Regra 2: Se não houver Leads, verifique as Conversas. Se Total de Conversas > 0 -> exibe o total de Conversas (Ícone de Balão). Calcule o CPL dividindo o Gasto Total por este número.
- * - Regra 3: Se não houver Leads nem Conversas -> exibe o Total de Visitas (Ícone de Link/Perfil). Calcule o Custo por Visita dividindo o Gasto Total por este número.
- */
-export function computeConsolidatedAccountResults(
-  spend: number,
-  actions: any[] = []
-): ConsolidatedAccountResults {
-  const { totalLeads, totalConversas, totalVisitas } = extractConsolidatedMetrics(actions);
-
-  let resultsType: 'leads' | 'conversas' | 'visitas' | 'nenhum' = 'nenhum';
-  let resultsCount = 0;
-  let cpl: number | null = null;
-
-  // Se Conversas for amplamente a métrica dominante do volume da conta (ex: 841 conversas vs 52 leads acidentais, ou 1885 conversas vs 8 leads)
-  if (totalConversas > 0 && totalConversas >= totalLeads * 3) {
-    resultsType = 'conversas';
-    resultsCount = totalConversas;
-    cpl = spend > 0 ? parseFloat((spend / totalConversas).toFixed(2)) : null;
-  }
-  // Regra 1: Se houver Total de Leads > 0, exiba o total de Leads (Ícone de Alvo). Calcule o CPL dividindo o Gasto Total por este número.
-  else if (totalLeads > 0) {
-    resultsType = 'leads';
-    resultsCount = totalLeads;
-    cpl = spend > 0 ? parseFloat((spend / totalLeads).toFixed(2)) : null;
-  }
-  // Regra 2: Se não houver Leads, verifique as Conversas. Se Total de Conversas > 0, exiba o total de Conversas (Ícone de Balão). Calcule o CPL dividindo o Gasto Total por este número.
-  else if (totalConversas > 0) {
-    resultsType = 'conversas';
-    resultsCount = totalConversas;
-    cpl = spend > 0 ? parseFloat((spend / totalConversas).toFixed(2)) : null;
-  }
-  // Regra 3: Se não houver Leads nem Conversas, exiba o Total de Visitas (Ícone de Link/Perfil). Calcule o Custo por Visita dividindo o Gasto Total por este número.
-  else if (totalVisitas > 0) {
-    resultsType = 'visitas';
-    resultsCount = totalVisitas;
-    cpl = spend > 0 ? parseFloat((spend / totalVisitas).toFixed(2)) : null;
-  } else {
-    resultsType = 'nenhum';
-    resultsCount = 0;
-    cpl = null;
-  }
-
-  return {
-    resultsType,
-    resultsCount,
-    cpl,
-    totalLeads,
-    totalConversas,
-    totalVisitas
-  };
-}
-
-// Wrapper retrocompatível
-export function extractConversasAndVisitas(actions: any[] = [], costPerAction: any[] = [], totalSpend: number = 0) {
-  const res = computeConsolidatedAccountResults(totalSpend, actions);
-  return {
-    leads: res.totalLeads,
-    costPerLead: res.resultsType === 'leads' ? res.cpl : null,
-    conversas: res.totalConversas,
-    cpl: res.resultsType === 'conversas' ? res.cpl : null,
-    visitas: res.totalVisitas,
-    costPerVisita: res.resultsType === 'visitas' ? res.cpl : null
-  };
-}
-
-/**
- * Busca dados em tempo real da carteira de contas da Meta Graph API
- * e faz o merge (cruzamento) com as metas de CPL salvas no Supabase.
+ * Busca a carteira de contas já calculada no servidor e cruza com:
+ * - metas de CPL (Supabase account_settings);
+ * - recargas do módulo Financeiro (contas pré-pagas).
  */
 export async function fetchCarteiraAccounts(
-  config: MetaConfig,
+  _config: MetaConfig,
   accounts: MetaAdAccount[],
-  dateRange?: any
+  dateRange?: { startDate?: string; endDate?: string },
+  options: { force?: boolean } = {}
 ): Promise<MetaAccountCarteiraItem[]> {
-  const token = config?.accessToken?.trim() || ADMIN_META_TOKEN;
-  
-  // 1. Busca metas salvas no Supabase (com fallback no cache local)
+  if (!accounts || accounts.length === 0) return [];
+
   const metaCplMap = await fetchAccountSettingsMap();
-
-  if (!accounts || accounts.length === 0) {
-    return [];
-  }
-
-  // 1.b Busca contas pré-pagas e recargas cadastradas no módulo Financeiro
   const financeiroAccounts = getFinanceiroAccounts();
   let hasFinanceiroUpdates = false;
 
-  const dateParams = buildDateParams(dateRange);
+  const todayIso = getTodayRange('America/Sao_Paulo').startDate;
+  const range = dateRange?.startDate && dateRange?.endDate
+    ? { since: dateRange.startDate, until: dateRange.endDate }
+    : { since: todayIso, until: todayIso };
 
-  // 2. Consulta em paralelo para cada conta os insights e as campanhas ativas
-  const carteiraItems: MetaAccountCarteiraItem[] = await Promise.all(
-    accounts.map(async (acc): Promise<MetaAccountCarteiraItem> => {
-      const actId = toActAccountId(acc.id);
-      const normId = normalizeAccountId(acc.id);
+  // Para contas pré-pagas com recargas lançadas, pede também o gasto desde a 1ª recarga paga
+  const requestAccounts = accounts.map((acc) => {
+    const finAcc = financeiroAccounts.find((f) => isMatchingAccount(f, acc));
+    const isPrepay = isAccountMarkedPrepay(acc, financeiroAccounts);
+    const prepaidSince = finAcc && isPrepay ? earliestPaidRecarga(finAcc.recargas, todayIso) : null;
+    return { id: normalizeAccountId(acc.id), prepaidSince };
+  });
 
-      let spend = 0;
-      let leads = 0;
-      let costPerLead: number | null = null;
-      let conversas = 0;
-      let cpl: number | null = null;
-      let visitas = 0;
-      let costPerVisita: number | null = null;
-      let dailyBudget = 0;
-      let campaignsList: any[] = [];
+  const serverRows = await invokeCarteira({ accounts: requestAccounts, ...range, force: Boolean(options.force) });
+  const byId = new Map(serverRows.map((r) => [normalizeAccountId(r.id), r]));
 
-      let resultsType: 'leads' | 'conversas' | 'visitas' | 'nenhum' = 'nenhum';
-      let resultsCount = 0;
-      let finalCpl: number | null = null;
+  const carteiraItems: MetaAccountCarteiraItem[] = accounts.map((acc): MetaAccountCarteiraItem => {
+    const normId = normalizeAccountId(acc.id);
+    const row = byId.get(normId);
+    if (row?.error) console.warn(`Conta ${normId}: ${row.error}`);
 
-      if (token) {
-        try {
-          // Consulta em paralelo insights e campanhas da conta
-          const [insightsRes, campRes] = await Promise.all([
-            axios.get(`${GRAPH_API_BASE}/${actId}/insights`, {
-              params: {
-                access_token: token,
-                fields: 'spend,impressions,clicks,actions,cost_per_action_type',
-                ...dateParams
-              },
-              timeout: 8000
-            }).catch(() => null),
-            axios.get(`${GRAPH_API_BASE}/${actId}/campaigns`, {
-              params: {
-                access_token: token,
-                fields: 'id,name,status,objective,daily_budget,lifetime_budget',
-                limit: 100
-              },
-              timeout: 8000
-            }).catch(() => null)
-          ]);
+    const spend = row?.spend ?? 0;
+    const breakdown = row?.breakdown;
+    const resultsType = (row?.resultsType ?? 'nenhum') as MetaAccountCarteiraItem['resultsType'];
+    const resultsCount = row?.resultsCount ?? 0;
+    const finalCpl = row?.cpl ?? null;
+    const avgDailySpend = row?.avg_daily_spend ?? 0;
+    // Orçamento ativo real; sem orçamento ativo, mostra o ritmo médio de gasto do período
+    const dailyBudget = row?.daily_budget && row.daily_budget > 0 ? row.daily_budget : avgDailySpend;
 
-          const insightData = insightsRes?.data?.data?.[0];
-          campaignsList = campRes?.data?.data || [];
+    // ---------------- Saldo de contas pré-pagas ----------------
+    const finAcc = financeiroAccounts.find((f) => isMatchingAccount(f, acc));
+    const isPrepay = Boolean(row?.is_prepay_account) || isAccountMarkedPrepay(acc, financeiroAccounts);
+    let balance = 0;
+    let totalAbastecidoBruto = 0;
+    let totalAbastecidoLiquido = 0;
+    let impostoAbastecido = 0;
 
-          if (insightData) {
-            spend = parseFloat(insightData.spend || '0');
-          }
-
-          let activeDailyBudgetCents = 0;
-          campaignsList.forEach((c: any) => {
-            if (c.status === 'ACTIVE' && c.daily_budget) {
-              activeDailyBudgetCents += parseInt(c.daily_budget, 10) || 0;
-            }
-          });
-          dailyBudget = activeDailyBudgetCents > 0 ? activeDailyBudgetCents / 100 : 0;
-
-          // Iteração Completa e Soma Consolidada seguindo a Hierarquia da Agência:
-          // 1. Soma os valores das 3 categorias simultaneamente: Leads, Conversas e Visitas
-          // 2. Aplica a hierarquia da agência: Leads > Conversas > Visitas (com desempate inteligente de volume)
-          // 3. Calcula o CPL dividindo spend pelo total do evento consolidado
-          const consolidated = computeConsolidatedAccountResults(
-            spend,
-            insightData?.actions || []
-          );
-
-          resultsType = consolidated.resultsType;
-          resultsCount = consolidated.resultsCount;
-          finalCpl = consolidated.cpl;
-          leads = consolidated.totalLeads;
-          conversas = consolidated.totalConversas;
-          visitas = consolidated.totalVisitas;
-        } catch (err) {
-          console.warn(`Erro ao consultar dados da conta ${acc.id}:`, err);
-        }
+    if (finAcc && isPrepay) {
+      const taxaDecimal = finAcc.aplicarImposto !== false
+        ? (finAcc.aliquotaImpostoPercentual ?? DEFAULT_META_TAX_PERCENT) / 100
+        : 0;
+      for (const r of finAcc.recargas) {
+        if (r.status !== 'Pago') continue;
+        totalAbastecidoBruto += r.valor;
+        impostoAbastecido += r.impostoValor !== undefined ? r.impostoValor : parseFloat((r.valor * taxaDecimal).toFixed(2));
+        totalAbastecidoLiquido += r.valorLiquido !== undefined ? r.valorLiquido : parseFloat((r.valor * (1 - taxaDecimal)).toFixed(2));
       }
+    }
 
-      // Se não houver orçamento diário das campanhas ativas, calcula ritmo de gasto médio diário
-      if (dailyBudget === 0 && spend > 0) {
-        dailyBudget = parseFloat((spend / 30).toFixed(2));
-      }
+    if (isPrepay && typeof row?.balance_meta === 'number') {
+      // 1º: saldo informado pela própria Meta
+      balance = row.balance_meta;
+    } else if (finAcc && isPrepay && totalAbastecidoLiquido > 0 && typeof row?.spend_since_prepaid === 'number') {
+      // 2º: recargas pagas (líquidas) − gasto desde a primeira recarga (não o gasto do período filtrado)
+      balance = Math.max(0, parseFloat((totalAbastecidoLiquido - row.spend_since_prepaid).toFixed(2)));
+    } else if (finAcc && finAcc.saldoAtualEmConta > 0) {
+      balance = finAcc.saldoAtualEmConta;
+    } else {
+      balance = typeof acc.balance === 'number' ? acc.balance : parseFloat(String(acc.balance || 0)) || 0;
+    }
 
-      // Vínculo inteligente com o módulo Financeiro de abastecimentos pré-pagos
-      const finAcc = financeiroAccounts.find(f => isMatchingAccount(f, acc));
+    if (finAcc && isPrepay && finAcc.saldoAtualEmConta !== balance) {
+      finAcc.saldoAtualEmConta = balance;
+      hasFinanceiroUpdates = true;
+    }
 
-      let isPrepay = isAccountMarkedPrepay(acc, financeiroAccounts);
-      let balance = 0;
-      let totalAbastecidoBruto = 0;
-      let totalAbastecidoLiquido = 0;
-      let impostoAbastecido = 0;
+    let remainingDays: number | null = null;
+    if (isPrepay) {
+      const pace = row?.daily_budget && row.daily_budget > 0 ? row.daily_budget : avgDailySpend;
+      remainingDays = pace > 0 ? parseFloat((balance / pace).toFixed(1)) : 99;
+    }
 
-      if (finAcc && isPrepay) {
-        isPrepay = true;
-        const taxaDecimal = finAcc.aplicarImposto !== false
-          ? (finAcc.aliquotaImpostoPercentual ?? DEFAULT_META_TAX_PERCENT) / 100
-          : 0;
+    // ---------------- Meta de CPL ----------------
+    const metaCpl = metaCplMap[normId] ?? null;
+    let statusMetaPercent: number | null = null;
+    let excessoPago: number | null = null;
+    if (metaCpl && finalCpl && metaCpl > 0) {
+      statusMetaPercent = parseFloat((((finalCpl - metaCpl) / metaCpl) * 100).toFixed(1));
+      excessoPago = finalCpl > metaCpl ? parseFloat(((finalCpl - metaCpl) * Math.max(resultsCount, 1)).toFixed(2)) : 0;
+    }
 
-        // Soma das recargas com status "Pago" (líquido após imposto Meta)
-        for (const r of finAcc.recargas) {
-          if (r.status === 'Pago') {
-            totalAbastecidoBruto += r.valor;
-            const rTax = r.impostoValor !== undefined ? r.impostoValor : parseFloat((r.valor * taxaDecimal).toFixed(2));
-            const rNet = r.valorLiquido !== undefined ? r.valorLiquido : parseFloat((r.valor * (1 - taxaDecimal)).toFixed(2));
-            impostoAbastecido += rTax;
-            totalAbastecidoLiquido += rNet;
-          }
-        }
-
-        // Saldo Real em Conta = Total Abastecido Líquido (Pago) - Gasto no Período (spend)
-        if (totalAbastecidoLiquido > 0) {
-          balance = Math.max(0, parseFloat((totalAbastecidoLiquido - spend).toFixed(2)));
-          if (finAcc.saldoAtualEmConta !== balance) {
-            finAcc.saldoAtualEmConta = balance;
-            hasFinanceiroUpdates = true;
-          }
-        } else if (finAcc.saldoAtualEmConta > 0) {
-          balance = finAcc.saldoAtualEmConta;
-        } else {
-          balance = typeof acc.balance === 'number' 
-            ? acc.balance 
-            : (acc.balance ? parseFloat(acc.balance as string) : 0);
-        }
-      } else {
-        balance = typeof acc.balance === 'number' 
-          ? acc.balance 
-          : (acc.balance ? parseFloat(acc.balance as string) : 0);
-      }
-
-      // Dias Restantes: Saldo / Orçamento Diário (Apenas para Contas Pré-Pagas)
-      let remainingDays: number | null = null;
-      if (isPrepay && balance >= 0) {
-        if (dailyBudget > 0) {
-          remainingDays = parseFloat((balance / dailyBudget).toFixed(1));
-        } else if (spend > 0) {
-          remainingDays = parseFloat((balance / (spend / 30)).toFixed(1));
-        } else {
-          remainingDays = 99; // Sem gasto ativo
-        }
-      }
-
-
-      // Meta de CPL salva no Supabase (com valor padrão razoável se não configurado)
-      const metaCpl = metaCplMap[normId] ?? null;
-
-      // Status da Meta (%): ((finalCpl - meta_cpl) / meta_cpl) * 100
-      let statusMetaPercent: number | null = null;
-      let excessoPago: number | null = null;
-
-      if (metaCpl && finalCpl && metaCpl > 0) {
-        statusMetaPercent = parseFloat((((finalCpl - metaCpl) / metaCpl) * 100).toFixed(1));
-        if (finalCpl > metaCpl) {
-          excessoPago = parseFloat(((finalCpl - metaCpl) * (resultsCount > 0 ? resultsCount : 1)).toFixed(2));
-        } else {
-          excessoPago = 0;
-        }
-      }
-
-      return {
-        id: normId,
-        raw_id: toActAccountId(normId),
-        name: acc.name || `Conta ${normId}`,
-        account_status: acc.account_status ?? 1,
-        currency: acc.currency || 'BRL',
-        timezone_name: acc.timezone_name || 'America/Sao_Paulo',
-        business_id: acc.business_id,
-        business_name: acc.business_name,
-        is_prepay_account: isPrepay,
-        balance,
-        amount_spent: typeof acc.amount_spent === 'number' ? acc.amount_spent : parseFloat(acc.amount_spent as string || '0'),
-        spend_cap: typeof acc.spend_cap === 'number' ? acc.spend_cap : parseFloat(acc.spend_cap as string || '0'),
-        daily_budget: dailyBudget,
-        spend,
-        conversas,
-        profile_visits: visitas,
-        leads,
-        resultsType,
-        resultsCount,
-        cpl: finalCpl,
-        meta_cpl: metaCpl,
-        remaining_days: remainingDays,
-        status_meta_percent: statusMetaPercent,
-        excesso_pago: excessoPago,
-        total_abastecido_liquido: totalAbastecidoLiquido > 0 ? totalAbastecidoLiquido : undefined,
-        total_abastecido_bruto: totalAbastecidoBruto > 0 ? totalAbastecidoBruto : undefined,
-        imposto_abastecido: impostoAbastecido > 0 ? impostoAbastecido : undefined
-      };
-    })
-  );
-
-  // Salva no cache os gastos e orçamentos atualizados de cada conta
-  const spendCache = getCarteiraSpendCache();
-  carteiraItems.forEach(item => {
-    spendCache[item.id] = {
-      id: item.id,
-      name: item.name,
-      spend: item.spend,
-      daily_budget: item.daily_budget
+    return {
+      id: normId,
+      raw_id: toActAccountId(normId),
+      name: row?.name || acc.name || `Conta ${normId}`,
+      account_status: row?.account_status ?? acc.account_status ?? 1,
+      currency: row?.currency || acc.currency || 'BRL',
+      timezone_name: row?.timezone_name || acc.timezone_name || 'America/Sao_Paulo',
+      business_id: acc.business_id,
+      business_name: acc.business_name,
+      is_prepay_account: isPrepay,
+      balance,
+      amount_spent: row?.amount_spent ?? (typeof acc.amount_spent === 'number' ? acc.amount_spent : parseFloat(String(acc.amount_spent || 0))),
+      spend_cap: row?.spend_cap ?? (typeof acc.spend_cap === 'number' ? acc.spend_cap : parseFloat(String(acc.spend_cap || 0))),
+      daily_budget: dailyBudget,
+      spend,
+      conversas: breakdown?.conversas.count ?? 0,
+      profile_visits: breakdown?.visitas.count ?? 0,
+      leads: breakdown?.leads.count ?? 0,
+      resultsType,
+      resultsCount,
+      cpl: finalCpl,
+      meta_cpl: metaCpl,
+      remaining_days: remainingDays,
+      status_meta_percent: statusMetaPercent,
+      excesso_pago: excessoPago,
+      total_abastecido_liquido: totalAbastecidoLiquido > 0 ? totalAbastecidoLiquido : undefined,
+      total_abastecido_bruto: totalAbastecidoBruto > 0 ? totalAbastecidoBruto : undefined,
+      imposto_abastecido: impostoAbastecido > 0 ? impostoAbastecido : undefined,
+      data_error: row?.error,
+      fetched_at: row?.fetched_at
     };
+  });
+
+  const spendCache = getCarteiraSpendCache();
+  carteiraItems.forEach((item) => {
+    spendCache[item.id] = { id: item.id, name: item.name, spend: item.spend, daily_budget: item.daily_budget };
   });
   saveCarteiraSpendCache(spendCache);
 
-  if (hasFinanceiroUpdates) {
-    saveFinanceiroAccounts(financeiroAccounts);
-  }
+  if (hasFinanceiroUpdates) saveFinanceiroAccounts(financeiroAccounts);
 
   return carteiraItems;
 }
-

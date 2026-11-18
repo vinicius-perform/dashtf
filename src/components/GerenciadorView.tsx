@@ -347,6 +347,8 @@ export const GerenciadorView: React.FC<GerenciadorViewProps> = React.memo(({
     let totalLinkClicks = 0;
     let totalLpViews = 0;
     let leadsSum = 0;
+    // Resultados por tipo (leads, conversas, visitas, outros): nunca somamos tipos diferentes
+    const byCategory: Record<string, { count: number; spend: number }> = {};
 
     items.forEach((item: any) => {
       if (item.spend !== null && item.spend !== undefined) {
@@ -376,32 +378,41 @@ export const GerenciadorView: React.FC<GerenciadorViewProps> = React.memo(({
         linkClicks = parseInt(item.clicks as any, 10);
       }
 
-      if (!lpViews && linkClicks > 0) {
-        lpViews = Math.round(linkClicks * 0.8511);
-      }
 
       totalLinkClicks += linkClicks;
       totalLpViews += lpViews;
 
+      const cat = item.resultCategory || 'outros';
+      byCategory[cat] = byCategory[cat] || { count: 0, spend: 0 };
+      byCategory[cat].spend += parseFloat(item.spend || 0) || 0;
       if (item.conversions !== null && item.conversions !== undefined) {
-        leadsSum += parseInt(item.conversions || 0);
+        byCategory[cat].count += Number(item.conversions) || 0;
       }
     });
+
+    // Exibe o tipo de resultado que concentra mais gasto; custo = gasto desse tipo ÷ resultados
+    let chosenCategory: string | null = null;
+    for (const [cat, v] of Object.entries(byCategory)) {
+      if (v.count <= 0) continue;
+      if (!chosenCategory || v.spend > byCategory[chosenCategory].spend) chosenCategory = cat;
+    }
+    leadsSum = chosenCategory ? byCategory[chosenCategory].count : 0;
+    const chosenSpend = chosenCategory ? byCategory[chosenCategory].spend : 0;
 
     if (spendSum === 0 && summary && summary.investimentoTotal) {
       spendSum = summary.investimentoTotal;
       impressionsSum = summary.impressioesTotal || 0;
       totalLinkClicks = summary.cliquesTotal || 0;
-      totalLpViews = summary.landingPageViewsTotal || Math.round(totalLinkClicks * 0.8511);
+      totalLpViews = summary.landingPageViewsTotal || 0;
       leadsSum = summary.leadsTotal || 0;
     }
 
     const cpmMedio = impressionsSum > 0 ? parseFloat(((spendSum / impressionsSum) * 1000).toFixed(2)) : 0;
     const ctrMedio = impressionsSum > 0 ? parseFloat(((totalLinkClicks / impressionsSum) * 100).toFixed(2)) : 0;
     const globalConnectRate =
-      totalLinkClicks > 0 ? parseFloat(((totalLpViews / totalLinkClicks) * 100).toFixed(2)) : 0;
+      totalLinkClicks > 0 && totalLpViews > 0 ? parseFloat(((totalLpViews / totalLinkClicks) * 100).toFixed(2)) : null;
     const cpcMedio = totalLinkClicks > 0 ? parseFloat((spendSum / totalLinkClicks).toFixed(2)) : null;
-    const cpaMedio = leadsSum > 0 ? parseFloat((spendSum / leadsSum).toFixed(2)) : null;
+    const cpaMedio = leadsSum > 0 ? parseFloat(((chosenSpend || spendSum) / leadsSum).toFixed(2)) : null;
 
     return {
       investimentoTotal: spendSum,
@@ -414,8 +425,15 @@ export const GerenciadorView: React.FC<GerenciadorViewProps> = React.memo(({
       cpcMedio,
       leadsTotal: leadsSum > 0 ? leadsSum : null,
       cpaMedio,
-    };
+      resultCategory: chosenCategory,
+    } as GerenciadorSummary & { resultCategory: string | null };
   }, [activeVisibleItems, campaigns, summary]);
+
+  const kpiCategory = (aggregatedKPIs as any).resultCategory as string | null;
+  const kpiResultTitle =
+    kpiCategory === 'conversas' ? 'Conversas' : kpiCategory === 'visitas' ? 'Visitas' : kpiCategory === 'leads' || !kpiCategory ? 'Leads' : 'Resultados';
+  const kpiCostTitle =
+    kpiCategory === 'conversas' ? 'Custo por Conversa' : kpiCategory === 'visitas' ? 'Custo por Visita' : kpiCategory === 'leads' || !kpiCategory ? 'Custo por Lead' : 'Custo por Resultado';
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
@@ -559,7 +577,7 @@ export const GerenciadorView: React.FC<GerenciadorViewProps> = React.memo(({
               isLoading={isLoading}
             />
             <MetricCard
-              title="Leads"
+              title={kpiResultTitle}
               mainValue={
                 aggregatedKPIs.leadsTotal !== null && aggregatedKPIs.leadsTotal !== undefined
                   ? formatNumber(aggregatedKPIs.leadsTotal)
@@ -569,7 +587,7 @@ export const GerenciadorView: React.FC<GerenciadorViewProps> = React.memo(({
               isLoading={isLoading}
             />
             <MetricCard
-              title="Custo por Lead"
+              title={kpiCostTitle}
               mainValue={
                 aggregatedKPIs.cpaMedio !== null && aggregatedKPIs.cpaMedio !== undefined
                   ? formatCurrency(aggregatedKPIs.cpaMedio)
