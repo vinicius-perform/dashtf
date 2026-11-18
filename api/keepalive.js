@@ -16,7 +16,7 @@ export default async function handler(req, res) {
 
   const started = Date.now();
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/sys_sync_status?select=id&limit=1`, {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/meta_carteira_cache?select=account_id&limit=1`, {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
     });
     return res.status(200).json({

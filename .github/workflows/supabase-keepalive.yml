@@ -19,7 +19,7 @@ jobs:
       - name: Consulta leve na API REST do Supabase
         run: |
           status=$(curl -s -o /dev/null -w "%{http_code}" \
-            "$SUPABASE_URL/rest/v1/sys_sync_status?select=id&limit=1" \
+            "$SUPABASE_URL/rest/v1/meta_carteira_cache?select=account_id&limit=1" \
             -H "apikey: $SUPABASE_ANON_KEY" \
             -H "Authorization: Bearer $SUPABASE_ANON_KEY")
           echo "Supabase respondeu HTTP $status"
