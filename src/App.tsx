@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { GerenciadorView } from './components/GerenciadorView';
 import { IntegrationsView } from './components/IntegrationsView';
 import { GestaoTarefasView } from './components/GestaoTarefasView';
+import { FinanceiroView } from './components/FinanceiroView';
 import { AIAssistantSidebar } from './components/AIAssistantSidebar';
 import { AISettingsModal } from './components/AISettingsModal';
 import { useAiContext } from './hooks/useAiContext';
@@ -41,7 +42,7 @@ import { LoginView } from './components/LoginView';
 import { supabase } from './lib/supabase';
 import { Loader2 } from 'lucide-react';
 import { DateRange } from './components/DateRangePicker';
-import { getTodayRange } from './utils/timezone';
+import { getTodayRange, getThisMonthRange } from './utils/timezone';
 import { 
   fetchHybridCampaigns, 
   sync7DaysAttributionWindow, 
@@ -55,7 +56,7 @@ export function App() {
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'gerenciador' | 'tarefas' | 'integracoes'>('gerenciador');
+  const [activeTab, setActiveTab] = useState<'gerenciador' | 'tarefas' | 'financeiro' | 'integracoes'>('gerenciador');
   const [activeLevel, setActiveLevel] = useState<string>('campanhas');
   const [metaConfig, setMetaConfig] = useState<MetaConfig>(getSavedMetaConfig());
   const [accounts, setAccounts] = useState<MetaAdAccount[]>(() => BM_ACCOUNTS_DICTIONARY['1098475893049001'] || []);
@@ -123,7 +124,24 @@ export function App() {
   const selectedAccObj = managedAccounts.find(a => a.id === selectedAccountId);
   const accountTimezone = selectedAccObj?.timezone_name || 'America/Sao_Paulo';
 
-  const [dateRange, setDateRange] = useState<DateRange>(() => getTodayRange(accountTimezone));
+  // Visão "Este mês" como padrão pré-definido / preferência
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    try {
+      const saved = localStorage.getItem('dashtf_date_range_pref');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.startDate && parsed?.endDate) return parsed;
+      }
+    } catch {}
+    return getThisMonthRange(accountTimezone);
+  });
+
+  const handleDateRangeChange = useCallback((newRange: DateRange) => {
+    setDateRange(newRange);
+    try {
+      localStorage.setItem('dashtf_date_range_pref', JSON.stringify(newRange));
+    } catch {}
+  }, []);
 
   const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
   const [adsets, setAdSets] = useState<MetaAdSet[]>([]);
@@ -227,14 +245,19 @@ export function App() {
     purgeExpiredSnapshots(60);
   }, []);
 
-  // Midnight Reactivity Check: Auto-advance "Hoje" date filter when account timezone crosses midnight
+  // Midnight Reactivity Check: Auto-advance date filters when account timezone crosses midnight
   useEffect(() => {
     const interval = setInterval(() => {
       const freshToday = getTodayRange(accountTimezone);
+      const freshThisMonth = getThisMonthRange(accountTimezone);
       setDateRange((prev) => {
         if (prev.label.startsWith('Hoje') && prev.startDate !== freshToday.startDate) {
           console.log(`🌙 [MIDNIGHT REACTIVITY] Account timezone crossed midnight! Advancing filter to ${freshToday.startDate}`);
           return freshToday;
+        }
+        if (prev.startDate === freshThisMonth.startDate && prev.endDate !== freshThisMonth.endDate) {
+          console.log(`🌙 [MIDNIGHT REACTIVITY] Advancing Este Mês filter to ${freshThisMonth.endDate}`);
+          return freshThisMonth;
         }
         return prev;
       });
@@ -417,7 +440,7 @@ export function App() {
           selectedAccountId={selectedAccountId}
           setSelectedAccountId={handleSelectAccount}
           dateRange={dateRange}
-          setDateRange={setDateRange}
+          setDateRange={handleDateRangeChange}
           onRefresh={loadAllData}
           isLoading={isLoading}
           searchQuery={searchQuery}
@@ -450,6 +473,10 @@ export function App() {
 
           {activeTab === 'tarefas' && (
             <GestaoTarefasView accounts={managedAccounts} />
+          )}
+
+          {activeTab === 'financeiro' && (
+            <FinanceiroView accounts={managedAccounts} />
           )}
 
           {activeTab === 'integracoes' && (

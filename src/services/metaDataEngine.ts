@@ -386,30 +386,45 @@ export function buildDateParams(dateRange?: any): Record<string, string> {
   return params;
 }
 
-// Strict Lead Action Extractor (Prevents Ghost Leads from secondary actions)
+// Strict Lead Action Extractor (Prevents Ghost Leads from secondary actions and isolates lead events)
 export function extractLeadsFromActions(actionsArray: any[]): { count: number; actionType: string | null } {
   if (!actionsArray || !Array.isArray(actionsArray)) return { count: 0, actionType: null };
 
+  // 1. Se existir o evento agregador 'lead', utiliza-o diretamente (evita sobreposição)
+  const leadRollup = actionsArray.find(a => a && a.action_type === 'lead');
+  if (leadRollup) {
+    const val = parseFloat(leadRollup.value || '0');
+    return {
+      count: val > 0 ? val : 0,
+      actionType: val > 0 ? 'lead' : null
+    };
+  }
+
+  // 2. Se não houver 'lead', busca o evento com maior contagem estrita de leads
   const leadTypes = [
-    'lead', 
+    'onsite_web_lead',
     'offsite_conversion.fb_pixel_lead', 
-    'onsite_conversion.lead_grouped'
+    'onsite_conversion.lead_grouped',
+    'leadgen_grouped'
   ];
 
-  // Search exclusively for strict lead action_types or custom lead conversion offsite_conversion.custom.{ID}
-  const leadAction = actionsArray.find(action => 
-    action && typeof action.action_type === 'string' && (
-      leadTypes.includes(action.action_type) || 
-      action.action_type.startsWith('offsite_conversion.custom.')
-    )
-  );
+  let maxCount = 0;
+  let chosenType: string | null = null;
 
-  if (!leadAction) return { count: 0, actionType: null };
+  for (const action of actionsArray) {
+    if (!action || typeof action.action_type !== 'string') continue;
+    if (leadTypes.includes(action.action_type) || action.action_type.startsWith('offsite_conversion.custom.')) {
+      const val = parseFloat(action.value || '0');
+      if (val > maxCount) {
+        maxCount = val;
+        chosenType = action.action_type;
+      }
+    }
+  }
 
-  const val = parseFloat(leadAction.value || '0');
   return {
-    count: val > 0 ? val : 0,
-    actionType: val > 0 ? leadAction.action_type : null
+    count: maxCount,
+    actionType: chosenType
   };
 }
 

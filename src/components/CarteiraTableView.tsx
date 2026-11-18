@@ -16,6 +16,7 @@ import {
   ExternalLink, 
   CreditCard, 
   Wallet, 
+  Target,
   Check, 
   AlertTriangle, 
   Flame, 
@@ -405,16 +406,20 @@ export const CarteiraTableView: React.FC<CarteiraTableViewProps> = ({
                       </div>
                     </td>
 
-                    {/* COLUNA 2: RESULTADOS (CONVERSAS OU VISITAS AO PERFIL) */}
+                    {/* COLUNA 2: RESULTADOS (LEADS, CONVERSAS OU VISITAS AO PERFIL) */}
                     <td className="py-3.5 px-4">
                       {item.resultsCount > 0 ? (
                         <div className="flex items-center gap-2">
                           <div className={`p-1.5 rounded-lg shrink-0 ${
-                            item.resultsType === 'conversas' 
-                              ? 'bg-emerald-500/10 text-emerald-400' 
-                              : 'bg-purple-500/10 text-purple-400'
+                            item.resultsType === 'leads'
+                              ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                              : item.resultsType === 'conversas' 
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                              : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
                           }`}>
-                            {item.resultsType === 'conversas' ? (
+                            {item.resultsType === 'leads' ? (
+                              <Target className="w-4 h-4" />
+                            ) : item.resultsType === 'conversas' ? (
                               <MessageSquare className="w-4 h-4" />
                             ) : (
                               <Instagram className="w-4 h-4" />
@@ -425,7 +430,7 @@ export const CarteiraTableView: React.FC<CarteiraTableViewProps> = ({
                               {formatNumber(item.resultsCount)}
                             </span>
                             <span className="block text-[11px] text-zinc-400">
-                              {item.resultsType === 'conversas' ? 'Conversas' : 'Visitas perfil'}
+                              {item.resultsType === 'leads' ? 'Leads' : item.resultsType === 'conversas' ? 'Conversas' : 'Visitas'}
                             </span>
                           </div>
                         </div>
@@ -442,7 +447,7 @@ export const CarteiraTableView: React.FC<CarteiraTableViewProps> = ({
                             {formatCurrency(item.cpl)}
                           </span>
                           <span className="block text-[10px] text-zinc-400">
-                            {item.resultsType === 'conversas' ? 'por conversa' : 'por resultado'}
+                            {item.resultsType === 'leads' ? 'por lead' : item.resultsType === 'conversas' ? 'por conversa' : 'por visita'}
                           </span>
                         </div>
                       ) : (
@@ -570,6 +575,18 @@ export const CarteiraTableView: React.FC<CarteiraTableViewProps> = ({
                         ) : (
                           <div className="w-full bg-zinc-800/60 rounded-full h-1.5">
                             <div className="h-full bg-blue-500/40 rounded-full w-full" />
+                          </div>
+                        )}
+
+                        {/* Detalhamento transparente do cálculo: Abastecido líquido - Gasto */}
+                        {item.is_prepay_account && item.total_abastecido_liquido !== undefined && item.total_abastecido_liquido > 0 && (
+                          <div className="text-[10px] text-zinc-400 mt-1 flex items-center justify-between font-mono">
+                            <span title="Total pago abastecido com 12,15% de imposto descontado">
+                              Abast. líq: {formatCurrency(item.total_abastecido_liquido)}
+                            </span>
+                            <span title="Gasto no período">
+                              Gasto: {formatCurrency(item.spend)}
+                            </span>
                           </div>
                         )}
                       </div>

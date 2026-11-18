@@ -9,6 +9,7 @@ import {
 } from '../types/meta';
 import { getAdSuggestion, extractAdConversasAndCpl } from '../utils/adDiagnostics';
 import { getFortalezaTodayDate } from '../utils/tarefasTime';
+import { getFinanceiroAccounts, calcularMetricasConta } from '../services/financeiroService';
 
 export interface AiScreenContext {
   activeTab: string;
@@ -190,6 +191,24 @@ export function useAiContext(params: {
       tarefasContext: {
         today,
         totalContas: agencyClients.length
+      },
+      financeiroContext: {
+        contasPrePagas: getFinanceiroAccounts().map(c => {
+          const m = calcularMetricasConta(c);
+          return {
+            nome: c.nome,
+            totalInvestirBruto: m.totalInvestirBruto,
+            totalInvestirLiquido: m.totalInvestirLiquido,
+            totalPagoBruto: m.totalPagoBruto,
+            totalPagoLiquido: m.totalPagoLiquido,
+            totalAFazerBruto: m.totalAFazerBruto,
+            saldoAtual: m.saldoAtualEmConta,
+            diasRestantesSaldo: m.diasRestantesSaldo,
+            statusAlerta: m.statusAlerta,
+            taxaImposto: m.taxaImposto,
+            proximaRecarga: m.proximaRecarga ? `${m.proximaRecarga.data} (R$ ${m.proximaRecarga.valor})` : 'Nenhuma'
+          };
+        })
       },
       agencyClients
     };

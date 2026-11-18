@@ -31,13 +31,17 @@ export interface MetaAccountCarteiraItem {
   spend: number; // Gasto no período
   conversas: number; // Conversas por mensagem
   profile_visits: number; // Visitas ao perfil
-  resultsType: 'conversas' | 'visitas' | 'nenhum';
+  leads?: number; // Leads gerados
+  resultsType: 'leads' | 'conversas' | 'visitas' | 'nenhum';
   resultsCount: number;
   cpl: number | null; // Custo por resultado (CPL atual)
   meta_cpl: number | null; // Meta de CPL salva no Supabase
   remaining_days: number | null; // Saldo / Ritmo diário
   status_meta_percent: number | null; // ((cpl - meta_cpl) / meta_cpl) * 100
   excesso_pago: number | null; // Excedente total pago além da meta
+  total_abastecido_liquido?: number; // Total abastecido líquido pago (descontado imposto)
+  total_abastecido_bruto?: number; // Total abastecido bruto pago
+  imposto_abastecido?: number; // Total de imposto retido nas recargas pagas
 }
 
 export interface FilterTag {

@@ -3,6 +3,7 @@ import { Logo } from './Logo';
 import { 
   LayoutDashboard, 
   CalendarCheck,
+  Wallet,
   Link2, 
   Settings,
   LogOut
@@ -83,6 +84,20 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
             >
               <CalendarCheck className="w-4 h-4 shrink-0" />
               {!isCollapsed && <span>Gestão de Tarefas</span>}
+            </button>
+
+            {/* Financeiro & Abastecimentos Button */}
+            <button
+              onClick={() => setActiveTab('financeiro')}
+              title={isCollapsed ? 'Financeiro' : undefined}
+              className={`w-full flex items-center ${isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'} rounded-lg text-sm font-semibold transition-all ${
+                activeTab === 'financeiro'
+                  ? 'bg-brand-neon text-black font-bold shadow-md shadow-brand-neon/20'
+                  : 'text-zinc-300 hover:bg-zinc-800/60 hover:text-white'
+              }`}
+            >
+              <Wallet className="w-4 h-4 shrink-0" />
+              {!isCollapsed && <span>Financeiro</span>}
             </button>
 
             {/* Integrações Meta Button */}
